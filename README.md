@@ -36,6 +36,23 @@ The shared Manim configuration is also a symlink owned here:
 
 Manim loads that user-wide file first, then lets a `manim.cfg` beside a scene override it. Command-line flags have the highest precedence.
 
+## Codex skill
+
+The repository owns the `manim-toolchain` skill at `skills/manim-toolchain`. Codex discovers that tracked copy through this symlink:
+
+```text
+~/.codex/skills/manim-toolchain -> ~/Developer/manim-toolchain/skills/manim-toolchain
+```
+
+For Typst authoring, use this skill together with [`my-typst-style`](https://github.com/kimpossible-TY/typst-packages/tree/main/skills/my-typst-style). That companion skill is maintained in the separate `typst-packages` repository and supplies the reusable mathematical-writing, diagram, annotation, and layout conventions used by this toolchain.
+
+Edit and commit the repository copy when changing the skill. After cloning the repository on this Mac, recreate the link with:
+
+```sh
+mkdir -p ~/.codex/skills
+ln -s /Users/taeyoung/Developer/manim-toolchain/skills/manim-toolchain ~/.codex/skills/manim-toolchain
+```
+
 ## Use from any video repository
 
 From the directory containing a scene:

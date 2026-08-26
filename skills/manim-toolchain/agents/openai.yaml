@@ -1,0 +1,4 @@
+interface:
+  display_name: "Manim Toolchain"
+  short_description: "Create styled, intuition-first Manim explanations"
+  default_prompt: "Use $manim-toolchain with $my-typst-style to create an intuition-first, story-driven Typst-based Manim scene."
