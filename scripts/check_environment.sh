@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly TOOLCHAIN_DIR="/Users/taeyoung/Projects/manim-toolchain"
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
 readonly GLOBAL_WRAPPER="/Users/taeyoung/.local/bin/manim-video"
 readonly USER_CONFIG="/Users/taeyoung/.config/manim/manim.cfg"
 
@@ -45,7 +45,7 @@ from manim import MathTypst, Typst
 from manim_voiceover import VoiceoverScene
 from manim_voiceover.services.gemini import GeminiService
 
-toolchain = Path("/Users/taeyoung/Projects/manim-toolchain")
+toolchain = Path("/Users/taeyoung/Developer/manim-toolchain")
 interpreter = Path(sys.executable).absolute()
 expected_environment = (toolchain / ".venv").absolute()
 

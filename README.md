@@ -23,7 +23,7 @@ The globally available command is a symlink:
 The wrapper executes the equivalent of:
 
 ```sh
-uv run --project /Users/taeyoung/Projects/manim-toolchain --frozen -- manim ...
+uv run --project /Users/taeyoung/Developer/manim-toolchain --frozen -- manim ...
 ```
 
 It deliberately does not change directories. `uv --project` selects this toolchain's `pyproject.toml`, `uv.lock`, `.python-version`, and `.venv`, while relative scene paths and output paths remain relative to the caller. Arguments after `manim` are forwarded unchanged. Inherited uv project-selection variables and `VIRTUAL_ENV` are cleared only in the wrapper process, so a caller repository's environment is neither activated nor modified.
@@ -60,7 +60,7 @@ The wrapper only loads credentials from this toolchain's `.env`, using uv's `--e
 For the default Gemini Developer API key mode, create a key in [Google AI Studio](https://aistudio.google.com/app/apikey), then edit the ignored central file:
 
 ```sh
-cd /Users/taeyoung/Projects/manim-toolchain
+cd /Users/taeyoung/Developer/manim-toolchain
 cp .env.example .env
 chmod 600 .env
 ${EDITOR:-vi} .env
@@ -85,7 +85,7 @@ GOOGLE_CLOUD_LOCATION=global
 ## Toolchain checks and smoke tests
 
 ```sh
-cd /Users/taeyoung/Projects/manim-toolchain
+cd /Users/taeyoung/Developer/manim-toolchain
 ./scripts/check_environment.sh
 ./scripts/render_smoke_tests.sh --typst-only
 ./scripts/verify_external_wrapper.sh
@@ -104,7 +104,7 @@ The external-wrapper test creates a temporary independent project with its own P
 Install exactly the committed lockfile:
 
 ```sh
-cd /Users/taeyoung/Projects/manim-toolchain
+cd /Users/taeyoung/Developer/manim-toolchain
 uv sync --frozen
 ```
 

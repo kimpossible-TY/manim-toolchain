@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly TOOLCHAIN_DIR="/Users/taeyoung/Projects/manim-toolchain"
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
 readonly FIXTURE_DIR="$TOOLCHAIN_DIR/tests/external-project"
 readonly LOG_DIR="$TOOLCHAIN_DIR/media/logs"
 

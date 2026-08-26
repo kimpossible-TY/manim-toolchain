@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly TOOLCHAIN_DIR="/Users/taeyoung/Projects/manim-toolchain"
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
 readonly MANIM_VIDEO="$TOOLCHAIN_DIR/bin/manim-video"
 
 cd "$TOOLCHAIN_DIR"
