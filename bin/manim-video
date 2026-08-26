@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Projects/manim-toolchain"
+
+if [[ ! -f "$TOOLCHAIN_DIR/pyproject.toml" || ! -f "$TOOLCHAIN_DIR/uv.lock" ]]; then
+    printf 'Central Manim toolchain is incomplete: %s\n' "$TOOLCHAIN_DIR" >&2
+    exit 1
+fi
+
+# The wrapper must never inherit project selection or an active environment
+# from the caller. Unsetting these affects only this child process.
+unset VIRTUAL_ENV
+unset UV_PROJECT UV_PROJECT_ENVIRONMENT
+unset UV_WORKING_DIR UV_WORKING_DIRECTORY
+unset UV_ENV_FILE UV_NO_ENV_FILE UV_PYTHON
+
+UV_BIN="$(command -v uv)"
+
+if [[ -f "$TOOLCHAIN_DIR/.env" ]]; then
+    credential_mode="$(stat -f '%Lp' "$TOOLCHAIN_DIR/.env")"
+    case "$credential_mode" in
+        400|600) ;;
+        *)
+            printf 'Refusing to load %s with permissions %s; run chmod 600 on it.\n' \
+                "$TOOLCHAIN_DIR/.env" "$credential_mode" >&2
+            exit 1
+            ;;
+    esac
+
+    exec "$UV_BIN" run \
+        --project "$TOOLCHAIN_DIR" \
+        --frozen \
+        --env-file "$TOOLCHAIN_DIR/.env" \
+        -- manim "$@"
+fi
+
+exec "$UV_BIN" run \
+    --project "$TOOLCHAIN_DIR" \
+    --frozen \
+    --no-env-file \
+    -- manim "$@"

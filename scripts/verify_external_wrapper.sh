@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Projects/manim-toolchain"
+readonly FIXTURE_DIR="$TOOLCHAIN_DIR/tests/external-project"
+readonly LOG_DIR="$TOOLCHAIN_DIR/media/logs"
+
+mkdir -p "$LOG_DIR"
+
+temp_base="$(CDPATH= cd -- "${TMPDIR:-/tmp}" && pwd -P)"
+TEMP_PROJECT="$(mktemp -d "$temp_base/manim-video-external.XXXXXX")"
+TEMP_PROJECT="$(CDPATH= cd -- "$TEMP_PROJECT" && pwd -P)"
+
+cleanup() {
+    case "$TEMP_PROJECT" in
+        "$temp_base"/manim-video-external.*) rm -rf "$TEMP_PROJECT" ;;
+        *) printf 'Refusing to clean unexpected path: %s\n' "$TEMP_PROJECT" >&2 ;;
+    esac
+}
+trap cleanup EXIT
+
+cp -R "$FIXTURE_DIR/." "$TEMP_PROJECT/"
+
+cd "$TEMP_PROJECT"
+uv venv --python 3.14 .venv
+
+external_venv_before="$(find .venv -print | LC_ALL=C sort | shasum -a 256)"
+
+# This is intentionally the public command, with a relative scene path, from a
+# project that has its own incompatible Python requirement and local .venv.
+manim-video scene.py TestScene 2>&1 | tee "$LOG_DIR/external-wrapper-smoke.log"
+
+external_venv_after="$(find .venv -print | LC_ALL=C sort | shasum -a 256)"
+if [[ "$external_venv_before" != "$external_venv_after" ]]; then
+    printf 'FAIL: the external project .venv was modified.\n' >&2
+    exit 1
+fi
+
+grep -F "EXTERNAL_SCENE_CWD=$TEMP_PROJECT" "$LOG_DIR/external-wrapper-smoke.log" >/dev/null
+grep -F "EXTERNAL_SCENE_PYTHON=$TOOLCHAIN_DIR/.venv/bin/python" "$LOG_DIR/external-wrapper-smoke.log" >/dev/null
+grep -F 'EXTERNAL_SCENE_MANIM=0.21.0' "$LOG_DIR/external-wrapper-smoke.log" >/dev/null
+grep -F 'EXTERNAL_SCENE_TYPST=0.15.0' "$LOG_DIR/external-wrapper-smoke.log" >/dev/null
+
+rendered_video="$(find external-media -type f -name 'TestScene.mp4' -print | head -n 1)"
+if [[ -z "$rendered_video" ]]; then
+    printf 'FAIL: external scene video was not produced.\n' >&2
+    exit 1
+fi
+
+ffprobe \
+    -v error \
+    -show_entries format=filename,duration,size:stream=index,codec_type,codec_name,width,height,r_frame_rate \
+    -of json \
+    "$rendered_video" | tee "$LOG_DIR/external-wrapper-smoke.ffprobe.json"
+
+printf 'PASS: caller cwd and relative scene path were preserved.\n'
+printf 'PASS: central interpreter and locked packages were used.\n'
+printf 'PASS: external pyproject.toml and .venv were ignored and left unchanged.\n'
