@@ -17,7 +17,7 @@ No MacTeX, BasicTeX, TinyTeX, or other TeX distribution is required.
 The globally available command is a symlink:
 
 ```text
-~/.local/bin/manim-video -> ~/Projects/manim-toolchain/bin/manim-video
+~/.local/bin/manim-video -> ~/Developer/manim-toolchain/bin/manim-video
 ```
 
 The wrapper executes the equivalent of:
@@ -31,7 +31,7 @@ It deliberately does not change directories. `uv --project` selects this toolcha
 The shared Manim configuration is also a symlink owned here:
 
 ```text
-~/.config/manim/manim.cfg -> ~/Projects/manim-toolchain/manim.cfg
+~/.config/manim/manim.cfg -> ~/Developer/manim-toolchain/manim.cfg
 ```
 
 Manim loads that user-wide file first, then lets a `manim.cfg` beside a scene override it. Command-line flags have the highest precedence.
