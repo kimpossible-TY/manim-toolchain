@@ -36,21 +36,28 @@ The shared Manim configuration is also a symlink owned here:
 
 Manim loads that user-wide file first, then lets a `manim.cfg` beside a scene override it. Command-line flags have the highest precedence.
 
-## Codex skill
+## Codex skills
 
-The repository owns the `manim-toolchain` skill at `skills/manim-toolchain`. Codex discovers that tracked copy through this symlink:
+The repository owns two skills:
+
+- `skills/manim-toolchain` maintains the shared Manim environment and scene workflow.
+- `skills/publish-typst-supplement` publishes generated media as versioned GitHub Release assets and links them from Typst/PDF documents.
+
+Codex discovers these tracked copies through global symlinks:
 
 ```text
 ~/.codex/skills/manim-toolchain -> ~/Developer/manim-toolchain/skills/manim-toolchain
+~/.codex/skills/publish-typst-supplement -> ~/Developer/manim-toolchain/skills/publish-typst-supplement
 ```
 
-For Typst authoring, use this skill together with [`my-typst-style`](https://github.com/kimpossible-TY/typst-packages/tree/main/skills/my-typst-style). That companion skill is maintained in the separate `typst-packages` repository and supplies the reusable mathematical-writing, diagram, annotation, and layout conventions used by this toolchain.
+For scene-oriented Typst authoring, use the `manim-toolchain` skill together with [`my-typst-style`](https://github.com/kimpossible-TY/typst-packages/tree/main/skills/my-typst-style). That companion skill is maintained in the separate `typst-packages` repository and supplies the reusable mathematical-writing, diagram, annotation, and layout conventions used by this toolchain.
 
-Edit and commit the repository copy when changing the skill. After cloning the repository on this Mac, recreate the link with:
+Edit and commit the repository copies when changing these skills. After cloning the repository on this Mac, recreate the links with:
 
 ```sh
 mkdir -p ~/.codex/skills
 ln -s /Users/taeyoung/Developer/manim-toolchain/skills/manim-toolchain ~/.codex/skills/manim-toolchain
+ln -s /Users/taeyoung/Developer/manim-toolchain/skills/publish-typst-supplement ~/.codex/skills/publish-typst-supplement
 ```
 
 ## Use from any video repository
