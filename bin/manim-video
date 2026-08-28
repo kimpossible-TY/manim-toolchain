@@ -31,6 +31,7 @@ if [[ -f "$TOOLCHAIN_DIR/.env" ]]; then
     exec "$UV_BIN" run \
         --project "$TOOLCHAIN_DIR" \
         --frozen \
+        --no-managed-python \
         --env-file "$TOOLCHAIN_DIR/.env" \
         -- manim "$@"
 fi
@@ -38,5 +39,6 @@ fi
 exec "$UV_BIN" run \
     --project "$TOOLCHAIN_DIR" \
     --frozen \
+    --no-managed-python \
     --no-env-file \
     -- manim "$@"

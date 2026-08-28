@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
+
+if [[ ! -f "$TOOLCHAIN_DIR/pyproject.toml" || ! -f "$TOOLCHAIN_DIR/uv.lock" ]]; then
+    printf 'Central visualization toolchain is incomplete: %s\n' "$TOOLCHAIN_DIR" >&2
+    exit 1
+fi
+
+# Select only the central Python environment. Keep the caller's working
+# directory, project files, and unrelated virtual environment untouched.
+unset VIRTUAL_ENV
+unset UV_PROJECT UV_PROJECT_ENVIRONMENT
+unset UV_WORKING_DIR UV_WORKING_DIRECTORY
+unset UV_ENV_FILE UV_NO_ENV_FILE UV_PYTHON
+
+# PyGfx and Taichi do not need narration credentials. Keep the credential
+# surface exclusive to manim-video and its central dotenv policy.
+unset GEMINI_API_KEY GOOGLE_API_KEY GEMINI_AUTH_MODE
+unset GOOGLE_CLOUD_PROJECT GOOGLE_CLOUD_LOCATION GOOGLE_APPLICATION_CREDENTIALS
+
+UV_BIN="$(command -v uv)"
+
+exec "$UV_BIN" run \
+    --project "$TOOLCHAIN_DIR" \
+    --frozen \
+    --no-managed-python \
+    --no-env-file \
+    -- python "$@"

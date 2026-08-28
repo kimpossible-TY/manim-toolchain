@@ -24,15 +24,26 @@ cp -R "$FIXTURE_DIR/." "$TEMP_PROJECT/"
 cd "$TEMP_PROJECT"
 uv venv --python 3.14 .venv
 
-external_venv_before="$(find .venv -print | LC_ALL=C sort | shasum -a 256)"
+hash_external_venv() {
+    COPYFILE_DISABLE=1 tar -cf - .venv | shasum -a 256
+}
+
+external_venv_before="$(hash_external_venv)"
+external_project_before="$(shasum -a 256 pyproject.toml)"
 
 # This is intentionally the public command, with a relative scene path, from a
 # project that has its own incompatible Python requirement and local .venv.
 manim-video scene.py TestScene 2>&1 | tee "$LOG_DIR/external-wrapper-smoke.log"
+visual-python visual_scene.py 2>&1 | tee "$LOG_DIR/external-visual-wrapper-smoke.log"
 
-external_venv_after="$(find .venv -print | LC_ALL=C sort | shasum -a 256)"
+external_venv_after="$(hash_external_venv)"
+external_project_after="$(shasum -a 256 pyproject.toml)"
 if [[ "$external_venv_before" != "$external_venv_after" ]]; then
     printf 'FAIL: the external project .venv was modified.\n' >&2
+    exit 1
+fi
+if [[ "$external_project_before" != "$external_project_after" ]]; then
+    printf 'FAIL: the external project pyproject.toml was modified.\n' >&2
     exit 1
 fi
 
@@ -41,9 +52,26 @@ grep -F "EXTERNAL_SCENE_PYTHON=$TOOLCHAIN_DIR/.venv/bin/python" "$LOG_DIR/extern
 grep -F 'EXTERNAL_SCENE_MANIM=0.21.0' "$LOG_DIR/external-wrapper-smoke.log" >/dev/null
 grep -F 'EXTERNAL_SCENE_TYPST=0.15.0' "$LOG_DIR/external-wrapper-smoke.log" >/dev/null
 
+grep -F "EXTERNAL_VISUAL_CWD=$TEMP_PROJECT" "$LOG_DIR/external-visual-wrapper-smoke.log" >/dev/null
+grep -F "EXTERNAL_VISUAL_PYTHON=$TOOLCHAIN_DIR/.venv/bin/python" "$LOG_DIR/external-visual-wrapper-smoke.log" >/dev/null
+grep -F 'EXTERNAL_VISUAL_PYGFX=0.17.0' "$LOG_DIR/external-visual-wrapper-smoke.log" >/dev/null
+grep -F 'EXTERNAL_VISUAL_WGPU=0.32.0' "$LOG_DIR/external-visual-wrapper-smoke.log" >/dev/null
+grep -F 'EXTERNAL_VISUAL_TAICHI=1.7.4' "$LOG_DIR/external-visual-wrapper-smoke.log" >/dev/null
+grep -F 'EXTERNAL_VISUAL_NARRATION=question/curious' "$LOG_DIR/external-visual-wrapper-smoke.log" >/dev/null
+grep -F 'EXTERNAL_VISUAL_CREDENTIALS_ABSENT=True' "$LOG_DIR/external-visual-wrapper-smoke.log" >/dev/null
+
 rendered_video="$(find external-media -type f -name 'TestScene.mp4' -print | head -n 1)"
 if [[ -z "$rendered_video" ]]; then
     printf 'FAIL: external scene video was not produced.\n' >&2
+    exit 1
+fi
+
+if [[ ! -s external-renders/frame.rgba ]]; then
+    printf 'FAIL: external offscreen frame was not produced.\n' >&2
+    exit 1
+fi
+if [[ "$(stat -f '%z' external-renders/frame.rgba)" -ne $((96 * 72 * 4)) ]]; then
+    printf 'FAIL: external offscreen frame has an unexpected size.\n' >&2
     exit 1
 fi
 
@@ -53,6 +81,7 @@ ffprobe \
     -of json \
     "$rendered_video" | tee "$LOG_DIR/external-wrapper-smoke.ffprobe.json"
 
-printf 'PASS: caller cwd and relative scene path were preserved.\n'
-printf 'PASS: central interpreter and locked packages were used.\n'
+printf 'PASS: both wrappers preserved the caller cwd and relative output paths.\n'
+printf 'PASS: central Manim, PyGfx, wgpu, Taichi, and narration packages were used.\n'
+printf 'PASS: visual-python did not load narration credentials.\n'
 printf 'PASS: external pyproject.toml and .venv were ignored and left unchanged.\n'

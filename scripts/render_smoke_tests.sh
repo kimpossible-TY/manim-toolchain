@@ -3,14 +3,15 @@ set -euo pipefail
 
 readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
 readonly MANIM_VIDEO="$TOOLCHAIN_DIR/bin/manim-video"
+readonly VISUAL_PYTHON="$TOOLCHAIN_DIR/bin/visual-python"
 
 cd "$TOOLCHAIN_DIR"
 
 MODE="${1:-all}"
 case "$MODE" in
-    all|--typst-only|--voiceover-only) ;;
+    all|--typst-only|--voiceover-only|--narration-only|--pygfx-only|--taichi-only|--visualization-only) ;;
     *)
-        printf 'Usage: %s [--typst-only|--voiceover-only]\n' "$0" >&2
+        printf 'Usage: %s [--typst-only|--voiceover-only|--narration-only|--pygfx-only|--taichi-only|--visualization-only]\n' "$0" >&2
         exit 64
         ;;
 esac
@@ -35,6 +36,22 @@ probe_video() {
         -show_entries format=filename,duration,size:stream=index,codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels \
         -of json \
         "$video_path" | tee "$metadata_path"
+}
+
+probe_file() {
+    local file_path="$1"
+    local metadata_path="$2"
+
+    if [[ ! -s "$file_path" ]]; then
+        printf 'Rendered output not found or empty: %s\n' "$file_path" >&2
+        return 1
+    fi
+
+    ffprobe \
+        -v error \
+        -show_entries format=filename,duration,size:stream=index,codec_type,codec_name,width,height,pix_fmt,r_frame_rate \
+        -of json \
+        "$file_path" | tee "$metadata_path"
 }
 
 render_typst() {
@@ -88,10 +105,56 @@ render_voiceover() {
     probe_video GeminiVoiceoverSmokeTest "$LOG_DIR/voiceover_smoke_test.ffprobe.json"
 }
 
-if [[ "$MODE" != "--voiceover-only" ]]; then
-    render_typst
-fi
+test_narration() {
+    local log_path="$LOG_DIR/narration_unit_tests.log"
 
-if [[ "$MODE" != "--typst-only" ]]; then
-    render_voiceover
-fi
+    "$VISUAL_PYTHON" -m unittest discover -s tests -p 'test_*.py' -v 2>&1 | tee "$log_path"
+}
+
+render_pygfx() {
+    local output_path="media/renders/pygfx_smoke.mp4"
+    local log_path="$LOG_DIR/pygfx_smoke_test.log"
+
+    "$VISUAL_PYTHON" scenes/pygfx_smoke_test.py \
+        --output "$output_path" --width 320 --height 240 --fps 12 --frames 24 \
+        2>&1 | tee "$log_path"
+    grep -F 'PYGFX_OFFSCREEN=PASS' "$log_path" >/dev/null
+    probe_file "$output_path" "$LOG_DIR/pygfx_smoke_test.ffprobe.json"
+}
+
+render_taichi() {
+    local output_path="media/simulations/taichi_pygfx_smoke.png"
+    local log_path="$LOG_DIR/taichi_pygfx_smoke_test.log"
+    local cpu_log_path="$LOG_DIR/taichi_cpu_smoke_test.log"
+
+    "$VISUAL_PYTHON" scenes/taichi_pygfx_smoke_test.py \
+        --arch metal --particles 256 --output "$output_path" \
+        2>&1 | tee "$log_path"
+    grep -F 'TAICHI_NUMERICAL=PASS' "$log_path" >/dev/null
+    grep -F 'TAICHI_PYGFX=PASS' "$log_path" >/dev/null
+    probe_file "$output_path" "$LOG_DIR/taichi_pygfx_smoke_test.ffprobe.json"
+
+    "$VISUAL_PYTHON" scenes/taichi_pygfx_smoke_test.py \
+        --arch cpu --particles 64 --numerical-only \
+        2>&1 | tee "$cpu_log_path"
+    grep -F 'TAICHI_NUMERICAL=PASS' "$cpu_log_path" >/dev/null
+}
+
+case "$MODE" in
+    all)
+        render_typst
+        test_narration
+        render_pygfx
+        render_taichi
+        render_voiceover
+        ;;
+    --typst-only) render_typst ;;
+    --voiceover-only) render_voiceover ;;
+    --narration-only) test_narration ;;
+    --pygfx-only) render_pygfx ;;
+    --taichi-only) render_taichi ;;
+    --visualization-only)
+        render_pygfx
+        render_taichi
+        ;;
+esac
