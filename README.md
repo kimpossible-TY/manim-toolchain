@@ -77,13 +77,14 @@ Manim remains the default for clear explanation, notation, vector diagrams, grap
 ~/.local/bin/visual-blender-preview -> ~/Developer/manim-toolchain/bin/visual-blender-preview
 ~/.local/bin/visual-blender-render -> ~/Developer/manim-toolchain/bin/visual-blender-render
 ~/.local/bin/visual-colab-prepare -> ~/Developer/manim-toolchain/bin/visual-colab-prepare
+~/.local/bin/visual-colab-stop (optional) -> ~/Developer/manim-toolchain/bin/visual-colab-stop
 ```
 
 `manim-video` runs the central Manim CLI and may load Gemini settings only from this repository's protected `.env`. `visual-python` runs ordinary Python with the central PyGfx/Taichi stack and always uses `--no-env-file`; it removes narration credential variables from its child process.
 
 Both wrappers deliberately keep the caller's working directory. They ignore caller uv-project selection, `VIRTUAL_ENV`, `pyproject.toml`, and `.venv`, so relative assets and outputs remain in the video repository while its dependencies remain untouched. They do not use `uv tool install` and do not `cd` into this repository.
 
-`visual-blender` is a transparent call to the installed Blender executable. The preview/render helpers run Blender background mode with Blender's own Python; they never create or alter a caller Python environment. `visual-colab-prepare` only creates a local bundle and explicit commands—it cannot authenticate, upload, allocate a runtime, or begin remote work.
+`visual-blender` is a transparent call to the installed Blender executable. The preview/render helpers run Blender background mode with Blender's own Python; they never create or alter a caller Python environment. `visual-colab-prepare` only creates a local bundle and explicit commands—it cannot authenticate, upload, allocate a runtime, or begin remote work. `visual-colab-stop` is the explicit shutdown helper for the reusable Colab worker.
 
 The equivalent generic invocation is:
 
@@ -227,7 +228,16 @@ visual-colab-prepare \
 
 This validates missing and unresolved absolute asset paths, copies only explicitly named assets, and creates `render_manifest.json`, `bootstrap.sh`, and authorization-marked `colab_commands.sh`. It does not perform a remote action. Starting a session, logging in, uploading assets, or consuming quota/credits requires explicit user authorization in that request. Never include `.env` files, credentials, browser profiles, unrelated repository files, private media, or datasets in a bundle.
 
-The generated Colab commands use the separately installed official `google-colab-cli`; do not add it to this project. After an authorized run, download PNG frames, verify their count/corruption/dimensions locally, and encode them with local FFmpeg. Do not claim a remote GPU render based on allocation or device enumeration alone—verify the completed Cycles report and frame output.
+The generated Colab commands use the separately installed official `google-colab-cli`; do not add it to this project. The normal reusable worker is `visual-render` with a default T4. Each job checks `colab sessions`, `colab status`, and a read-only `/content` probe before reusing it; an absent worker requires the explicit `--allow-new-session` flag (or `COLAB_ALLOW_NEW_SESSION=1`) before `colab new` can allocate one. A successful job leaves the session running for later jobs. When remote work is finished, run `visual-colab-stop` (or `./bin/visual-colab-stop`); `--stop-after-job` remains available for explicit disposable mode. Download PNG frames, verify their count/corruption/dimensions and completed Cycles report locally, then encode with local FFmpeg. The requested GPU flag is never treated as proof of actual GPU rendering.
+
+```sh
+# Reuse visual-render when it exists; authorize first allocation explicitly if absent.
+./render-job/colab_commands.sh
+./render-job/colab_commands.sh --allow-new-session
+
+# After all remote jobs are downloaded and verified:
+./bin/visual-colab-stop
+```
 
 ## Mixed explanation scenes and composition
 

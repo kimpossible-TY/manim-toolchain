@@ -116,14 +116,53 @@ Colab only after a reduced local benchmark shows a useful advantage.
 
 `visual-colab-prepare` only creates a minimal validated bundle and explicit
 commands; it never logs in, uploads, provisions a runtime, or starts a job.
-Before an action that consumes quota/credits or uploads assets, obtain explicit
-authorization in the current request. Never upload credentials, unrelated
-repository files, `.env` files, private datasets, or browser profiles. If login
-is interactive, stop and ask the user to complete it.
+Colab remains optional and local-first. Before an action that uploads assets,
+starts remote computation, consumes GPU quota/credits, or allocates a new
+runtime, obtain explicit authorization in the current request. Never upload
+credentials, ADC files, SSH/private keys, browser profiles, unrelated
+repository files, `.env` files, or confidential datasets that were not
+explicitly included. If login is interactive, stop and ask the user to
+complete it.
+
+The default reusable remote worker is named `visual-render` and requests a T4.
+The generated workflow checks the installed official Colab CLI for that named
+session before creating anything:
+
+```text
+job lifecycle:     prepare -> upload -> execute -> download -> verify
+session lifecycle: create -> reuse for zero or more jobs -> explicit stop
+```
+
+If `visual-render` is healthy and reachable, reuse it without another
+allocation prompt; do not ask for a second allocation authorization solely
+because that already-authorized worker is reused for another job in the same
+explicit remote workflow. If it is absent, `colab_commands.sh` refuses to allocate a
+runtime unless it is run with the explicit `--allow-new-session` flag (or
+`COLAB_ALLOW_NEW_SESSION=1`). A session's accelerator is fixed for its
+lifetime: never report an existing T4 as L4/A100/H100, and use a different
+named session or stop the old one before requesting another accelerator.
+`COLAB_GPU` overrides the request for a new or explicitly named session, but
+the backend's actual hardware is checked before upload; there is no silent
+fallback. T4 is the default, and no accelerator is escalated automatically.
+
+Normal jobs leave the reusable session running. Use the separate
+`visual-colab-stop` helper (or `./bin/visual-colab-stop`) when remote work is
+finished. The generated script also supports the explicitly disposable
+`--stop-after-job` mode. A failed job does not stop a healthy shared session.
+
+Remote `/content` storage is ephemeral cache, not durable storage. Every job
+uses a unique remote directory under `/content/manim-toolchain/jobs/`, and
+important PNG/OpenEXR outputs and reports must return to local storage. For
+Blender, keep the flow `remote Cycles PNG sequence -> local verification ->
+local FFmpeg composition`; never depend on an artifact left in `/content` for
+correctness. The bundle is self-contained enough to bootstrap a fresh
+authorized session, while reusing an already-installed compatible Blender
+instead of reinstalling it on every job.
 
 Read [`references/colab.md`](references/colab.md) when preparing or evaluating
 remote work. It covers the `render-job/` manifest, upload boundary, and
-resumable image-sequence return flow.
+reusable-session policy, job isolation, and resumable image-sequence return
+flow.
 
 ## Keep narration separate from notation
 

@@ -11,6 +11,7 @@ readonly GLOBAL_BLENDER_WRAPPER="/Users/taeyoung/.local/bin/visual-blender"
 readonly GLOBAL_BLENDER_PREVIEW_WRAPPER="/Users/taeyoung/.local/bin/visual-blender-preview"
 readonly GLOBAL_BLENDER_RENDER_WRAPPER="/Users/taeyoung/.local/bin/visual-blender-render"
 readonly GLOBAL_COLAB_PREPARE_WRAPPER="/Users/taeyoung/.local/bin/visual-colab-prepare"
+readonly GLOBAL_COLAB_STOP_WRAPPER="/Users/taeyoung/.local/bin/visual-colab-stop"
 readonly USER_CONFIG="/Users/taeyoung/.config/manim/manim.cfg"
 
 unset VIRTUAL_ENV
@@ -257,6 +258,11 @@ check_wrapper "$GLOBAL_BLENDER_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-blender"
 check_wrapper "$GLOBAL_BLENDER_PREVIEW_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-blender-preview"
 check_wrapper "$GLOBAL_BLENDER_RENDER_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-blender-render"
 check_wrapper "$GLOBAL_COLAB_PREPARE_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-colab-prepare"
+if [[ -e "$GLOBAL_COLAB_STOP_WRAPPER" || -L "$GLOBAL_COLAB_STOP_WRAPPER" ]]; then
+    check_wrapper "$GLOBAL_COLAB_STOP_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-colab-stop"
+else
+    printf 'Global Colab stop wrapper: optional (use %s/bin/visual-colab-stop)\n' "$TOOLCHAIN_DIR"
+fi
 
 if [[ "$(readlink "$USER_CONFIG")" != "$TOOLCHAIN_DIR/manim.cfg" ]]; then
     printf 'User-wide Manim config does not point to the central project.\n' >&2
