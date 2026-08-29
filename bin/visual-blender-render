@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
+
+if [[ ! -f "$TOOLCHAIN_DIR/scripts/blender_render.py" ]]; then
+    printf 'Central Blender render helper is missing: %s\n' "$TOOLCHAIN_DIR" >&2
+    exit 1
+fi
+
+# Render to PNG frames or a single PNG.  For completely custom Blender flags,
+# use visual-blender directly; this helper keeps only common safe defaults.
+exec "$TOOLCHAIN_DIR/bin/visual-blender" \
+    --background \
+    --python "$TOOLCHAIN_DIR/scripts/blender_render.py" \
+    -- \
+    --mode render \
+    --engine cycles \
+    "$@"

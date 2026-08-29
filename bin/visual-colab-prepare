@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
+
+# This creates and validates a local, explicit job bundle only.  It never
+# authenticates, uploads, allocates a Colab runtime, or starts remote work.
+exec "$TOOLCHAIN_DIR/bin/visual-python" \
+    "$TOOLCHAIN_DIR/scripts/prepare_blender_render_job.py" "$@"

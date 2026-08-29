@@ -4,14 +4,18 @@ set -euo pipefail
 readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
 readonly MANIM_VIDEO="$TOOLCHAIN_DIR/bin/manim-video"
 readonly VISUAL_PYTHON="$TOOLCHAIN_DIR/bin/visual-python"
+readonly BLENDER_PREVIEW="$TOOLCHAIN_DIR/bin/visual-blender-preview"
+readonly BLENDER_RENDER="$TOOLCHAIN_DIR/bin/visual-blender-render"
+readonly BLENDER="$TOOLCHAIN_DIR/bin/visual-blender"
+readonly COLAB_PREPARE="$TOOLCHAIN_DIR/bin/visual-colab-prepare"
 
 cd "$TOOLCHAIN_DIR"
 
 MODE="${1:-all}"
 case "$MODE" in
-    all|--typst-only|--voiceover-only|--narration-only|--pygfx-only|--taichi-only|--visualization-only) ;;
+    all|--typst-only|--voiceover-only|--narration-only|--pygfx-only|--taichi-only|--blender-only|--visualization-only) ;;
     *)
-        printf 'Usage: %s [--typst-only|--voiceover-only|--narration-only|--pygfx-only|--taichi-only|--visualization-only]\n' "$0" >&2
+        printf 'Usage: %s [--typst-only|--voiceover-only|--narration-only|--pygfx-only|--taichi-only|--blender-only|--visualization-only]\n' "$0" >&2
         exit 64
         ;;
 esac
@@ -140,12 +144,54 @@ render_taichi() {
     grep -F 'TAICHI_NUMERICAL=PASS' "$cpu_log_path" >/dev/null
 }
 
+render_blender() {
+    local eevee_output="media/renders/blender_eevee_smoke.png"
+    local eevee_report="$LOG_DIR/blender_eevee_smoke.json"
+    local cycles_output="media/renders/blender_cycles_smoke.png"
+    local cycles_report="$LOG_DIR/blender_cycles_smoke.json"
+    local job_parent
+    local source_blend
+    local job_dir
+
+    "$BLENDER_PREVIEW" \
+        --scene-script scenes/blender_smoke_scene.py \
+        --output "$eevee_output" --report "$eevee_report" \
+        --width 256 --height 144 --samples 4 --frame 1 \
+        2>&1 | tee "$LOG_DIR/blender_eevee_smoke.log"
+    "$VISUAL_PYTHON" scripts/verify_blender_render.py \
+        --image "$eevee_output" --report "$eevee_report" \
+        --engine BLENDER_EEVEE --width 256 --height 144
+
+    "$BLENDER_RENDER" \
+        --scene-script scenes/blender_smoke_scene.py \
+        --output "$cycles_output" --report "$cycles_report" \
+        --width 128 --height 72 --samples 4 --device cpu --frame 1 \
+        2>&1 | tee "$LOG_DIR/blender_cycles_smoke.log"
+    "$VISUAL_PYTHON" scripts/verify_blender_render.py \
+        --image "$cycles_output" --report "$cycles_report" \
+        --engine CYCLES --width 128 --height 72
+
+    job_parent="$(mktemp -d /tmp/manim-toolchain-render-job.XXXXXX)"
+    source_blend="$job_parent/source.blend"
+    job_dir="$job_parent/render-job"
+    "$BLENDER" --background --python scripts/blender_render.py -- \
+        --mode validate --scene-script scenes/blender_smoke_scene.py \
+        --save-blend "$source_blend"
+    "$COLAB_PREPARE" \
+        --scene "$source_blend" --scene-script scenes/blender_smoke_scene.py \
+        --output "$job_dir" --width 96 --height 54 --fps 12 \
+        --frame-start 1 --frame-end 2 --samples 2 --device cpu
+    "$VISUAL_PYTHON" scripts/verify_render_job.py \
+        --job "$job_dir" --frame-start 1 --frame-end 2
+}
+
 case "$MODE" in
     all)
         render_typst
         test_narration
         render_pygfx
         render_taichi
+        render_blender
         render_voiceover
         ;;
     --typst-only) render_typst ;;
@@ -153,8 +199,10 @@ case "$MODE" in
     --narration-only) test_narration ;;
     --pygfx-only) render_pygfx ;;
     --taichi-only) render_taichi ;;
+    --blender-only) render_blender ;;
     --visualization-only)
         render_pygfx
         render_taichi
+        render_blender
         ;;
 esac

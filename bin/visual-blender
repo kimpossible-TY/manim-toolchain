@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Direct, transparent access to the installed Blender executable.  This wrapper
+# deliberately does not activate the central uv environment or load dotenv
+# files; Blender scripts run with Blender's bundled Python.
+if [[ -n "${BLENDER_BIN:-}" ]]; then
+    blender_bin="$BLENDER_BIN"
+elif command -v blender >/dev/null 2>&1; then
+    blender_bin="$(command -v blender)"
+elif [[ -x /Applications/Blender.app/Contents/MacOS/Blender ]]; then
+    blender_bin="/Applications/Blender.app/Contents/MacOS/Blender"
+else
+    printf '%s\n' 'Blender is not installed. Install the native macOS application or a Homebrew cask.' >&2
+    exit 127
+fi
+
+exec "$blender_bin" "$@"

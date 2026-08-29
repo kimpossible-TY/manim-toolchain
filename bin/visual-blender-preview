@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
+
+if [[ ! -f "$TOOLCHAIN_DIR/scripts/blender_render.py" ]]; then
+    printf 'Central Blender render helper is missing: %s\n' "$TOOLCHAIN_DIR" >&2
+    exit 1
+fi
+
+# Defaults are intentionally configurable.  Passing an explicit option after
+# these defaults overrides it for one invocation without changing a .blend.
+exec "$TOOLCHAIN_DIR/bin/visual-blender" \
+    --background \
+    --python "$TOOLCHAIN_DIR/scripts/blender_render.py" \
+    -- \
+    --mode preview \
+    --engine eevee \
+    --width "${VISUAL_BLENDER_PREVIEW_WIDTH:-960}" \
+    --height "${VISUAL_BLENDER_PREVIEW_HEIGHT:-540}" \
+    --samples "${VISUAL_BLENDER_PREVIEW_SAMPLES:-16}" \
+    --resolution-percentage "${VISUAL_BLENDER_PREVIEW_SCALE:-100}" \
+    "$@"

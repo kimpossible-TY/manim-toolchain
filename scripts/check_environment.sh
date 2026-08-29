@@ -7,6 +7,10 @@ readonly HOMEBREW_PYTHON="$HOMEBREW_PREFIX/opt/python@3.13/bin/python3.13"
 readonly -a HOMEBREW_FORMULAE=(uv python@3.13 typst ffmpeg sox)
 readonly GLOBAL_MANIM_WRAPPER="/Users/taeyoung/.local/bin/manim-video"
 readonly GLOBAL_VISUAL_WRAPPER="/Users/taeyoung/.local/bin/visual-python"
+readonly GLOBAL_BLENDER_WRAPPER="/Users/taeyoung/.local/bin/visual-blender"
+readonly GLOBAL_BLENDER_PREVIEW_WRAPPER="/Users/taeyoung/.local/bin/visual-blender-preview"
+readonly GLOBAL_BLENDER_RENDER_WRAPPER="/Users/taeyoung/.local/bin/visual-blender-render"
+readonly GLOBAL_COLAB_PREPARE_WRAPPER="/Users/taeyoung/.local/bin/visual-colab-prepare"
 readonly USER_CONFIG="/Users/taeyoung/.config/manim/manim.cfg"
 
 unset VIRTUAL_ENV
@@ -80,6 +84,24 @@ ffprobe -version 2>&1 | sed -n '1p'
 printf 'SoX: '
 brew list --versions sox
 
+BLENDER_BIN="$(command -v blender || true)"
+if [[ -z "$BLENDER_BIN" && -x /Applications/Blender.app/Contents/MacOS/Blender ]]; then
+    BLENDER_BIN="/Applications/Blender.app/Contents/MacOS/Blender"
+fi
+if [[ -n "$BLENDER_BIN" ]]; then
+    printf 'Blender executable: %s\n' "$BLENDER_BIN"
+    "$BLENDER_BIN" --version | sed -n '1p'
+else
+    printf 'Blender: missing (optional; local Blender previews and Cycles checks are unavailable)\n'
+fi
+
+if COLAB_BIN="$(command -v colab 2>/dev/null)"; then
+    printf 'Colab CLI: %s\n' "$COLAB_BIN"
+    "$COLAB_BIN" version | sed -n '1p'
+else
+    printf 'Colab CLI: missing (optional; only local bundle preparation is available)\n'
+fi
+
 run_uv python - <<'PY'
 from importlib import metadata
 from inspect import signature
@@ -91,6 +113,8 @@ from manim import MathTypst, Typst
 from manim_voiceover import VoiceoverScene
 from manim_voiceover.services.gemini import GeminiService
 import manim_toolchain
+import numpy as np
+import pygfx as gfx
 from manim_toolchain.voiceover import ExpressiveGeminiService, ExpressiveVoiceoverScene
 import pygfx
 from rendercanvas.offscreen import RenderCanvas
@@ -151,8 +175,35 @@ print(f"PyGfx import: {pygfx.__name__}")
 print(f"wgpu import: {wgpu.__name__}")
 print(f"rendercanvas offscreen class: {RenderCanvas.__module__}.{RenderCanvas.__name__}")
 print(f"Taichi import: {taichi.__name__}")
+
+canvas = RenderCanvas(size=(64, 48), pixel_ratio=1)
+renderer = gfx.WgpuRenderer(canvas)
+scene = gfx.Scene()
+scene.add(gfx.Background.from_color("#101820"))
+cube = gfx.Mesh(gfx.box_geometry(1, 1, 1), gfx.MeshBasicMaterial(color="#4da3ff"))
+scene.add(cube)
+camera = gfx.PerspectiveCamera(55, 64 / 48)
+camera.show_object(cube, view_dir=(1.8, 1.2, 2.6), scale=1.4)
+canvas.request_draw(lambda: renderer.render(scene, camera))
+frame = np.asarray(canvas.draw()).copy()
+if frame.shape != (48, 64, 4) or float(frame.std()) < 5:
+    raise SystemExit(f"FAIL: PyGfx offscreen frame is invalid: {frame.shape}, std={frame.std():.3f}")
+adapter = renderer.device.adapter.info
+print(f"PyGfx backend: {adapter.get('backend_type', 'unknown')}")
+print(f"PyGfx device: {adapter.get('device', 'unknown')}")
+print("PyGfx offscreen frame: PASS")
 print("Central Python package ownership: PASS")
 PY
+
+check_taichi_backend() {
+    local requested_arch="$1"
+    run_uv python "$TOOLCHAIN_DIR/scripts/taichi_backend_check.py" "$requested_arch"
+}
+
+if [[ "$(uname -m)" == "arm64" ]]; then
+    check_taichi_backend metal
+fi
+check_taichi_backend cpu
 
 "$HOMEBREW_PYTHON" - <<'PY'
 from importlib import metadata
@@ -202,6 +253,10 @@ check_wrapper() {
 
 check_wrapper "$GLOBAL_MANIM_WRAPPER" "$TOOLCHAIN_DIR/bin/manim-video"
 check_wrapper "$GLOBAL_VISUAL_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-python"
+check_wrapper "$GLOBAL_BLENDER_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-blender"
+check_wrapper "$GLOBAL_BLENDER_PREVIEW_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-blender-preview"
+check_wrapper "$GLOBAL_BLENDER_RENDER_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-blender-render"
+check_wrapper "$GLOBAL_COLAB_PREPARE_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-colab-prepare"
 
 if [[ "$(readlink "$USER_CONFIG")" != "$TOOLCHAIN_DIR/manim.cfg" ]]; then
     printf 'User-wide Manim config does not point to the central project.\n' >&2
@@ -220,4 +275,8 @@ done
 
 if [[ "$latex_found" -eq 0 ]]; then
     printf 'LaTeX executables on PATH: none (expected)\n'
+fi
+
+if [[ -n "$BLENDER_BIN" ]]; then
+    "$BLENDER_BIN" --background --python "$TOOLCHAIN_DIR/scripts/blender_diagnostics.py"
 fi
