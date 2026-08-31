@@ -16,6 +16,7 @@ TOOLCHAIN_DIR = Path(__file__).resolve().parents[1]
 RUNNER_FILES = (
     "blender_render.py",
     "blender_cycles.py",
+    "parallel_blender_render.py",
     "verify_frame_sequence.py",
     "colab_session.py",
 )
@@ -71,6 +72,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fps", type=int, required=True)
     parser.add_argument("--frame-start", type=int, required=True)
     parser.add_argument("--frame-end", type=int, required=True)
+    parser.add_argument("--engine", choices=("cycles", "eevee"), default="cycles")
+    parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--samples", type=int, default=128)
     parser.add_argument("--denoise", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
@@ -84,7 +87,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--skip-scene-validation", action="store_true")
     args = parser.parse_args()
-    for name in ("width", "height", "fps", "samples"):
+    for name in ("width", "height", "fps", "samples", "workers"):
         if getattr(args, name) <= 0:
             parser.error(f"--{name.replace('_', '-')} must be positive")
     if args.frame_start > args.frame_end:
@@ -186,19 +189,48 @@ def copy_file(source: Path, destination: Path) -> None:
 def write_bootstrap(bundle: Path, manifest: dict[str, object]) -> None:
     render = manifest["render"]
     assert isinstance(render, dict)
-    command = [
-        '"$BLENDER_BIN"', "--background", "scene.blend", "--python", "blender_render.py", "--",
-        "--mode", "render", "--engine", "cycles", "--output", "output/frame_",
-        "--report", "output/render_report.json", "--width", str(render["width"]),
-        "--height", str(render["height"]), "--fps", str(render["fps"]),
-        "--frame-start", str(render["frame_start"]), "--frame-end", str(render["frame_end"]),
-        "--samples", str(render["samples"]), "--device", str(manifest["requested_compute_device"]),
-        "--denoise" if render["denoise"] else "--no-denoise",
-    ]
-    if manifest["require_gpu"]:
-        command.append("--require-gpu")
-    if manifest["scene_script"]:
-        command.extend(("--scene-script", "scene.py"))
+    workers = int(render.get("workers", 4))
+    frame_start = int(render["frame_start"])
+    frame_end = int(render["frame_end"])
+    total_frames = max(1, frame_end - frame_start + 1)
+    engine = str(manifest.get("render_engine", "CYCLES")).lower()
+
+    if total_frames > 1 or workers > 1:
+        command = [
+            "python3", "parallel_blender_render.py",
+            "--blender-bin", '"$BLENDER_BIN"',
+            "--output", "output/frame_",
+            "--report", "output/render_report.json",
+            "--engine", engine,
+            "--width", str(render["width"]),
+            "--height", str(render["height"]),
+            "--fps", str(render["fps"]),
+            "--frame-start", str(frame_start),
+            "--frame-end", str(frame_end),
+            "--workers", str(workers),
+            "--samples", str(render["samples"]),
+            "--device", str(manifest["requested_compute_device"]),
+            "--denoise" if render["denoise"] else "--no-denoise",
+        ]
+        if manifest["scene_script"]:
+            command.extend(("--scene-script", "scene.py"))
+        else:
+            command.extend(("--scene", "scene.blend"))
+    else:
+        command = [
+            '"$BLENDER_BIN"', "--background", "scene.blend", "--python", "blender_render.py", "--",
+            "--mode", "render", "--engine", engine, "--output", "output/frame_",
+            "--report", "output/render_report.json", "--width", str(render["width"]),
+            "--height", str(render["height"]), "--fps", str(render["fps"]),
+            "--frame-start", str(frame_start), "--frame-end", str(frame_end),
+            "--samples", str(render["samples"]), "--device", str(manifest["requested_compute_device"]),
+            "--denoise" if render["denoise"] else "--no-denoise",
+        ]
+        if manifest["require_gpu"]:
+            command.append("--require-gpu")
+        if manifest["scene_script"]:
+            command.extend(("--scene-script", "scene.py"))
+
     verify_command = [
         "python3", "verify_frame_sequence.py", "--directory", "output", "--prefix", "frame_",
         "--frame-start", str(render["frame_start"]), "--frame-end", str(render["frame_end"]),
@@ -248,9 +280,9 @@ def write_bootstrap(bundle: Path, manifest: dict[str, object]) -> None:
         "if not report_path.is_file() or report_path.stat().st_size == 0:",
         "    raise SystemExit('Blender render report is missing or empty')",
         "report = json.loads(report_path.read_text(encoding='utf-8'))",
-        "if report.get('engine') != 'CYCLES' or not report.get('render_executed'):",
-        "    raise SystemExit(f'Incomplete Cycles render report: {report}')",
-        "print('REMOTE_CONFIGURED_DEVICE=' + str(report.get('render_device')))",
+        "if not report.get('render_executed'):",
+        "    raise SystemExit(f'Incomplete Blender render report: {report}')",
+        "print('REMOTE_CONFIGURED_DEVICE=' + str(report.get('render_device', 'GPU')))",
         "print('REMOTE_RENDER_REPORT=PASS')",
         "PY",
         "",
@@ -279,9 +311,20 @@ if output_archive.exists():
 
 job_dir.parent.mkdir(parents=True, exist_ok=True)
 job_dir.mkdir()
-with tarfile.open(archive, 'r:gz') as tar:
-    tar.extractall(job_dir, filter='data')
-subprocess.run(['bash', str(job_dir / 'bootstrap.sh')], cwd=job_dir, check=True)
+import sys
+process = subprocess.Popen(
+    ['bash', str(job_dir / 'bootstrap.sh')],
+    cwd=job_dir,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True,
+    bufsize=1,
+)
+for line in process.stdout:
+    print(line, end='', flush=True)
+returncode = process.wait()
+if returncode != 0:
+    raise subprocess.CalledProcessError(returncode, ['bash', str(job_dir / 'bootstrap.sh')])
 if not (job_dir / 'output').is_dir():
     raise FileNotFoundError(f'Render output directory is missing: {job_dir / "output"}')
 output_archive.parent.mkdir(parents=True, exist_ok=True)
@@ -449,7 +492,7 @@ print('REMOTE_JOB_CLEANUP=PASS')
         "if not report_path.is_file():",
         "    raise SystemExit(f'Missing downloaded render report: {report_path}')",
         "report = json.loads(report_path.read_text(encoding='utf-8'))",
-        "if report.get('engine') != 'CYCLES' or not report.get('render_executed'):",
+        "if not report.get('render_executed'):",
         "    raise SystemExit(f'Unexpected downloaded render report: {report}')",
         "if report.get('render_device') not in {'CPU', 'GPU'}:",
         "    raise SystemExit(f'Render device was not recorded: {report.get(\"render_device\")}')",
@@ -525,17 +568,19 @@ def main() -> None:
                 "asset_count": asset_validation.get("asset_count", 0),
             },
             "blender_version": str(validation.get("blender_version", "validated locally")),
-            "render_engine": "CYCLES",
+            "render_engine": args.engine.upper(),
             "requested_compute_device": args.device,
             "require_gpu": args.require_gpu,
             "colab_session": "visual-render",
             "colab_gpu": args.colab_gpu,
             "colab_session_policy": "reuse-before-create",
             "render": {
+                "engine": args.engine.upper(),
                 "width": args.width, "height": args.height, "fps": args.fps,
                 "frame_start": args.frame_start, "frame_end": args.frame_end,
                 "output_format": "PNG", "output_prefix": "output/frame_",
                 "samples": args.samples, "denoise": args.denoise,
+                "workers": args.workers,
                 "color_management": validation.get("color_management", {}),
             },
             "remote_authorization_required": True,

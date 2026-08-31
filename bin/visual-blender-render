@@ -8,8 +8,16 @@ if [[ ! -f "$TOOLCHAIN_DIR/scripts/blender_render.py" ]]; then
     exit 1
 fi
 
-# Render to PNG frames or a single PNG.  For completely custom Blender flags,
-# use visual-blender directly; this helper keeps only common safe defaults.
+# If --workers is specified, route through parallel_blender_render.py
+for arg in "$@"; do
+    if [[ "$arg" == "--workers" || "$arg" =~ ^--workers= ]]; then
+        exec python3 "$TOOLCHAIN_DIR/scripts/parallel_blender_render.py" \
+            --blender-bin "$TOOLCHAIN_DIR/bin/visual-blender" \
+            "$@"
+    fi
+done
+
+# Otherwise execute single-worker render
 exec "$TOOLCHAIN_DIR/bin/visual-blender" \
     --background \
     --python "$TOOLCHAIN_DIR/scripts/blender_render.py" \

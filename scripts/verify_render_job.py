@@ -14,6 +14,7 @@ REQUIRED_FILES = {
     "scene.blend",
     "blender_render.py",
     "blender_cycles.py",
+    "parallel_blender_render.py",
     "render_manifest.json",
     "bootstrap.sh",
     "colab_commands.sh",

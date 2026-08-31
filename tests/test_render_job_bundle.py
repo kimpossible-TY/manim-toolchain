@@ -336,6 +336,25 @@ class RenderJobBundleTests(unittest.TestCase):
             self.assertIn("NEW -s visual-render --gpu T4", created_log_text)
             self.assertIn("STOP -s visual-render", created_log_text)
 
+    def test_parallel_render_bundle_configuration(self) -> None:
+        with TemporaryDirectory() as directory:
+            temp = Path(directory)
+            scene = temp / "scene.blend"
+            scene.write_bytes(b"offline fixture")
+            job = temp / "parallel-job"
+            prepared = run_prepare(job, scene, "--workers", "6", "--engine", "eevee")
+            self.assertEqual(prepared.returncode, 0, prepared.stderr)
+
+            manifest = json.loads((job / "render_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["render_engine"], "EEVEE")
+            self.assertEqual(manifest["render"]["workers"], 6)
+            self.assertTrue((job / "parallel_blender_render.py").is_file())
+
+            bootstrap = (job / "bootstrap.sh").read_text(encoding="utf-8")
+            self.assertIn("parallel_blender_render.py", bootstrap)
+            self.assertIn("--workers 6", bootstrap)
+            self.assertIn("--engine eevee", bootstrap)
+
 
 if __name__ == "__main__":
     unittest.main()

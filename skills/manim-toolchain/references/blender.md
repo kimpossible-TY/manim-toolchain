@@ -27,13 +27,13 @@ work.
 
 3. **Colab CLI execution (default for all Blender production renders)**:
    Package the portable bundle and execute remote rendering on the reusable
-   `visual-render` GPU worker session:
+   `visual-render` GPU worker session with multi-worker parallel chunking:
 
    ```sh
    visual-colab-prepare \
      --scene scene.blend --scene-script scenes/hero.py --asset-dir assets \
      --output render-job --width 1920 --height 1080 --fps 30 \
-     --frame-start 1 --frame-end 240 --samples 128 --device auto
+     --frame-start 1 --frame-end 240 --workers 4 --samples 128 --device auto
 
    # Execute on Colab CLI (reuses existing visual-render worker instantly):
    ./render-job/colab_commands.sh
@@ -52,13 +52,13 @@ work.
    PNG frames. Combine the verified PNG sequence with other story beats using
    local FFmpeg.
 
-## Local diagnostic renderers
+## Local multi-worker & diagnostic rendering
 
-For local CPU fallback diagnostics or transparent CLI access, `visual-blender`
-and `visual-blender-render` remain available:
+For local rendering with parallel worker chunking or CPU fallback diagnostics,
+`visual-blender-render` supports `--workers N`:
 
 ```sh
 visual-blender-render --scene scene.blend --scene-script scenes/hero.py \
-  --output media/blender/frame_ --frame-start 1 --frame-end 10 \
-  --width 1280 --height 720 --samples 32 --device cpu
+  --output media/blender/frame_ --frame-start 1 --frame-end 240 \
+  --width 1920 --height 1080 --workers 6 --engine eevee
 ```
