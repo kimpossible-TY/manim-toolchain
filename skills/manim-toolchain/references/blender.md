@@ -1,62 +1,64 @@
 # Blender previews, Cycles, and portable scenes
 
-Read this only when a request genuinely needs Blender-level materials, lighting,
+Read this when a request genuinely needs Blender-level materials, lighting,
 assets, transparency, cinematic camera work, rigging, volumetrics, or geometry
-work. Start with local EEVEE: validate composition, materials, camera, and
-timing at configurable low resolution/samples without saving over the production
-scene. `VISUAL_BLENDER_PREVIEW_WIDTH`, `VISUAL_BLENDER_PREVIEW_HEIGHT`,
-`VISUAL_BLENDER_PREVIEW_SAMPLES`, and `VISUAL_BLENDER_PREVIEW_SCALE` set local
-defaults; command-line flags override them per render.
+work.
 
-Use `visual-blender` for unmodified Blender CLI access. The preview/render
-helpers run Blender background mode with `scripts/blender_render.py`; they do
-not use uv Python and leave the source `.blend` untouched unless `--save-blend`
-is explicit.
+## Workflow: Local EEVEE preview -> Colab CLI Cycles render -> Local FFmpeg
+
+1. **Local EEVEE preview**:
+   Validate composition, materials, camera, and timing locally at configurable
+   low resolution/samples without modifying the production `.blend`:
+
+   ```sh
+   visual-blender-preview --scene scene.blend --scene-script scenes/hero.py \
+     --output media/previews/hero.png --report media/previews/hero.json
+   ```
+
+   `VISUAL_BLENDER_PREVIEW_WIDTH`, `VISUAL_BLENDER_PREVIEW_HEIGHT`,
+   `VISUAL_BLENDER_PREVIEW_SAMPLES`, and `VISUAL_BLENDER_PREVIEW_SCALE` configure
+   local preview defaults.
+
+2. **Asset validation & packaging**:
+   Before packaging, ensure external assets use packed data or Blender-relative
+   `//` paths. Missing assets and unresolved absolute local paths will fail
+   bundle validation. Pack small assets directly; put large licensed assets in
+   the explicit `assets/` directory.
+
+3. **Colab CLI execution (default for all Blender production renders)**:
+   Package the portable bundle and execute remote rendering on the reusable
+   `visual-render` GPU worker session:
+
+   ```sh
+   visual-colab-prepare \
+     --scene scene.blend --scene-script scenes/hero.py --asset-dir assets \
+     --output render-job --width 1920 --height 1080 --fps 30 \
+     --frame-start 1 --frame-end 240 --samples 128 --device auto
+
+   # Execute on Colab CLI (reuses existing visual-render worker instantly):
+   ./render-job/colab_commands.sh
+   ```
+
+4. **Local frame verification & FFmpeg composition**:
+   The downloaded image sequence and render report are verified locally:
+
+   ```sh
+   visual-python ~/Developer/manim-toolchain/scripts/verify_frame_sequence.py \
+     --directory render-job/output --prefix frame_ --frame-start 1 --frame-end 240 \
+     --width 1920 --height 1080
+   ```
+
+   The verifier rejects missing, zero-byte, corrupt, and inconsistent-dimension
+   PNG frames. Combine the verified PNG sequence with other story beats using
+   local FFmpeg.
+
+## Local diagnostic renderers
+
+For local CPU fallback diagnostics or transparent CLI access, `visual-blender`
+and `visual-blender-render` remain available:
 
 ```sh
-visual-blender-preview --scene scene.blend --scene-script scenes/hero.py \
-  --output media/previews/hero.png --report media/previews/hero.json
-
 visual-blender-render --scene scene.blend --scene-script scenes/hero.py \
-  --output media/blender/frame_ --frame-start 1 --frame-end 240 \
-  --width 1920 --height 1080 --fps 30 --samples 128 --device auto
-```
-
-The `--device` values include `auto`, `cpu`, `gpu`, and specific Cycles backends
-such as `metal` or `cuda`; `--require-gpu` turns an unavailable compatible GPU
-into a clear failure instead of a fallback. The helper records the configured
-Cycles state, but report GPU success only after the actual Cycles render and its
-image have been verified. Blender version-specific device logic stays in
-`scripts/blender_cycles.py`.
-
-For animation, render image sequences rather than an MP4. Use ranges or chunks
-such as `1–120`, `121–240`, then check completed PNGs locally:
-
-```sh
-visual-python ~/Developer/manim-toolchain/scripts/verify_frame_sequence.py \
-  --directory media/blender --prefix frame_ --frame-start 1 --frame-end 240 \
-  --width 1920 --height 1080
-```
-
-The verifier rejects missing, zero-byte, corrupt, and inconsistent-dimension
-PNG frames. Keep Blender color settings from the JSON render report alongside
-the manifest so composition can reconcile color transforms deliberately.
-
-Before remote packaging, validate external assets. A remote bundle accepts only
-packed data or Blender-relative `//` paths; missing assets and unresolved
-absolute local paths fail validation. Pack genuinely small assets where that is
-reasonable; put large licensed assets in the explicit `assets/` directory.
-Never add third-party assets to the repository without verifying their license.
-
-Make a local EEVEE preview first. For any expensive final render, measure at
-least one representative expensive Cycles frame before deciding whether local
-Cycles or Colab offers a real benefit. The small benchmark helper records wall
-time and peak child RSS where the operating system exposes it, and can estimate
-the cost of a frame range:
-
-```sh
-visual-python ~/Developer/manim-toolchain/scripts/benchmark_blender_render.py \
-  --frame-count 240 --report media/benchmarks/cycles.json -- \
-  visual-blender-render --scene scene.blend --output media/benchmarks/frame.png \
-  --width 1920 --height 1080 --samples 128 --frame 120 --device cpu
+  --output media/blender/frame_ --frame-start 1 --frame-end 10 \
+  --width 1280 --height 720 --samples 32 --device cpu
 ```

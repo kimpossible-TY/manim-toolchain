@@ -1,10 +1,12 @@
-# Optional Colab compute and Cycles rendering
+# Colab compute and Cycles rendering via Colab CLI
 
-Read this when a measured local Taichi or Cycles workload may justify remote
-execution. Colab is an optional backend, not the normal destination for Manim,
-ordinary PyGfx, EEVEE previews, short renders, or final FFmpeg composition.
-The persistent session is only a temporary remote GPU worker that reduces
-repeated provisioning overhead after Colab has already been justified.
+Read this when executing Blender Cycles rendering or Taichi compute workloads
+remotely. Colab CLI is the standard remote destination for all Blender Cycles
+production rendering. Manim, ordinary PyGfx, EEVEE previews, and final FFmpeg
+composition remain local by default.
+
+The persistent session (`visual-render`) serves as a fast remote GPU worker that
+eliminates repeated provisioning and installation overhead across jobs.
 
 The installed official CLI is a separate system-level tool, not a dependency
 of the central visualization project. This repository was validated against

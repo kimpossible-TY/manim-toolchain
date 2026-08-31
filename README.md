@@ -179,9 +179,11 @@ visual-python /Users/taeyoung/Developer/manim-toolchain/scenes/taichi_pygfx_smok
   --arch cpu --numerical-only
 ```
 
-## Blender escalation and local preview
+## Blender escalation and Colab CLI rendering
 
 Blender is a conditional high-fidelity renderer, not the default 3D engine. Use it for a realistic translucent bladder, a product/anatomical model, complex shadows, depth of field, volumetrics, rigging, imported assets, or another shot where PyGfx cannot communicate the result efficiently. A rotating cube, triangulated sphere, or wave surface normally belongs in Manim, PyGfx, or Taichi + PyGfx.
+
+All Blender production renders and Cycles image-sequence batches are executed remotely via **Colab CLI**. Local Blender is used for scene authoring, rapid composition/framing validation with lightweight EEVEE previews, and asset portability checks.
 
 Author reproducible scenes with regular Blender Python. Start with a local EEVEE background preview; the defaults are configurable through `VISUAL_BLENDER_PREVIEW_WIDTH`, `VISUAL_BLENDER_PREVIEW_HEIGHT`, `VISUAL_BLENDER_PREVIEW_SAMPLES`, and `VISUAL_BLENDER_PREVIEW_SCALE` and do not save over the source `.blend`:
 
@@ -190,45 +192,35 @@ visual-blender-preview --scene-script scenes/anatomy.py \
   --output media/previews/anatomy.png --width 1280 --height 720 --frame 1
 ```
 
-Then render one representative Cycles frame—including an expensive frame—and compare local render time, memory pressure, and estimated total duration with remote setup/transfer cost. For final animation, use a PNG sequence rather than a remote MP4:
-
-```sh
-visual-blender-render --scene scene.blend --scene-script scenes/anatomy.py \
-  --output media/blender/frame_ --frame-start 1 --frame-end 240 \
-  --width 1920 --height 1080 --fps 30 --samples 128 --device auto
-
-visual-python /Users/taeyoung/Developer/manim-toolchain/scripts/verify_frame_sequence.py \
-  --directory media/blender --prefix frame_ --frame-start 1 --frame-end 240 \
-  --width 1920 --height 1080
-```
-
-For a repeatable benchmark (wall time, peak child RSS where available, and an optional whole-range estimate):
-
-```sh
-visual-python /Users/taeyoung/Developer/manim-toolchain/scripts/benchmark_blender_render.py \
-  --frame-count 240 --report media/benchmarks/cycles.json -- \
-  visual-blender-render --scene scene.blend --output media/benchmarks/frame.png \
-  --width 1920 --height 1080 --samples 128 --frame 120 --device cpu
-```
-
-The render helper records engine, resolution, color management, and configured Cycles device in a JSON report. It detects supported backends, falls back to CPU safely, and fails with `--require-gpu` when a requested GPU cannot be configured. A real Cycles image must exist before treating device configuration as a successful render.
-
-## Optional Colab render and compute offload
-
-Local execution is the default. Consider Colab only after a reduced local Taichi or Cycles benchmark shows that a GPU/memory advantage outweighs provisioning, dependency installation, upload, render, download, and final local composition. Colab is not the default for Manim, normal PyGfx, EEVEE previews, short renders, or FFmpeg composition.
-
-Prepare a small, portable Blender bundle locally:
+For production rendering, prepare a portable bundle and execute via Colab CLI:
 
 ```sh
 visual-colab-prepare \
   --scene scene.blend --scene-script scenes/anatomy.py --asset-dir assets \
   --output render-job --width 1920 --height 1080 --fps 30 \
   --frame-start 1 --frame-end 240 --samples 128 --device auto
+
+# Run on the reusable visual-render GPU worker:
+./render-job/colab_commands.sh
 ```
 
-This validates missing and unresolved absolute asset paths, copies only explicitly named assets, and creates `render_manifest.json`, `bootstrap.sh`, and authorization-marked `colab_commands.sh`. It does not perform a remote action. Starting a session, logging in, uploading assets, or consuming quota/credits requires explicit user authorization in that request. Never include `.env` files, credentials, browser profiles, unrelated repository files, private media, or datasets in a bundle.
+Downloaded frames and reports are verified locally, then composed with FFmpeg:
 
-The generated Colab commands use the separately installed official `google-colab-cli`; do not add it to this project. The normal reusable worker is `visual-render` with a default T4. Each job checks `colab sessions`, `colab status`, and a read-only `/content` probe before reusing it; an absent worker requires the explicit `--allow-new-session` flag (or `COLAB_ALLOW_NEW_SESSION=1`) before `colab new` can allocate one. A successful job leaves the session running for later jobs. When remote work is finished, run `visual-colab-stop` (or `./bin/visual-colab-stop`); `--stop-after-job` remains available for explicit disposable mode. Download PNG frames, verify their count/corruption/dimensions and completed Cycles report locally, then encode with local FFmpeg. The requested GPU flag is never treated as proof of actual GPU rendering.
+```sh
+visual-python /Users/taeyoung/Developer/manim-toolchain/scripts/verify_frame_sequence.py \
+  --directory render-job/output --prefix frame_ --frame-start 1 --frame-end 240 \
+  --width 1920 --height 1080
+```
+
+For local CPU fallback diagnostics or transparent CLI access, `visual-blender` and `visual-blender-render` remain available.
+
+## Colab render and compute offload
+
+Manim, ordinary PyGfx, EEVEE previews, and final FFmpeg composition stay local by default. **All Blender Cycles renders and heavy simulation compute are routed to Colab CLI.**
+
+`visual-colab-prepare` validates missing and unresolved absolute asset paths, copies only explicitly named assets, and creates `render_manifest.json`, `bootstrap.sh`, and authorization-marked `colab_commands.sh`. It does not perform a remote action. Starting a session, logging in, uploading assets, or consuming quota/credits requires explicit user authorization in that request. Never include `.env` files, credentials, browser profiles, unrelated repository files, private media, or datasets in a bundle.
+
+The generated Colab commands use the separately installed official `google-colab-cli`; do not add it to this project. The normal reusable worker is `visual-render` with a default T4. Each job checks `colab sessions`, `colab status`, and a read-only `/content` probe before reusing it; an absent worker requires the explicit `--allow-new-session` flag (or `COLAB_ALLOW_NEW_SESSION=1`) before `colab new` can allocate one. Thanks to pre-built portable tarball installation and persistent session reuse, subsequent jobs reuse the running worker instantly. When remote work is finished, run `visual-colab-stop` (or `./bin/visual-colab-stop`); `--stop-after-job` remains available for explicit disposable mode. Download PNG frames, verify their count/corruption/dimensions and completed Cycles report locally, then encode with local FFmpeg. The requested GPU flag is never treated as proof of actual GPU rendering.
 
 ```sh
 # Reuse visual-render when it exists; authorize first allocation explicitly if absent.

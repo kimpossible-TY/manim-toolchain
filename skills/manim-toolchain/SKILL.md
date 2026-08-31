@@ -43,7 +43,7 @@ Plan the intuition and visual transformation before choosing technology.
 | Meshes, surfaces, point clouds, spatial fields, camera perspective, or lightweight scientific 3D | PyGfx |
 | Analytically prescribed motion with modest state | NumPy + PyGfx |
 | Many evolving particles/grids/fields, PDEs, or compute-heavy deformation | Taichi + PyGfx |
-| Materials, lighting, anatomy, imported assets, volumetrics, rigging, or a cinematic hero shot that materially benefits | Blender |
+| Materials, lighting, anatomy, imported assets, volumetrics, rigging, or a cinematic hero shot that materially benefits | Blender (Colab CLI) |
 | Distinct explanatory and high-fidelity/numerical beats in one story | Mixed segments + FFmpeg |
 
 Do not choose Blender because an object is three-dimensional, or Taichi because
@@ -57,9 +57,9 @@ Useful routing checks:
 - Triangulated sphere: PyGfx.
 - Twenty-thousand particles in a vortex: Taichi + PyGfx, then benchmark local
   before considering remote compute.
-- Realistic translucent bladder: Blender.
+- Realistic translucent bladder: Blender (rendered via Colab CLI).
 - Equations, anatomical shot, and flow-rate graph: Manim + short Blender shot
-  + FFmpeg.
+  (Colab CLI) + FFmpeg.
 - A rotating cube: Manim or PyGfx unless realistic rendering is explicitly
   valuable.
 
@@ -74,7 +74,7 @@ Use engines for successive beats of one idea, not as disconnected demos:
 ```text
 Manim question/equation -> Manim geometric intuition
   -> PyGfx or Taichi/PyGfx numerical manifestation
-  -> optional Blender hero shot -> Manim interpretation
+  -> optional Blender hero shot (Colab CLI) -> Manim interpretation
 ```
 
 Set resolution, FPS, background/color language, narration cadence, and
@@ -82,87 +82,71 @@ transition frames before rendering. Use the composition reference when the
 result combines segments or separate narration:
 [`references/composition.md`](references/composition.md).
 
-## Blender is conditional and local-first
+## Blender renders via Colab CLI; EEVEE for local preview
 
-For normal Blender work, author an ordinary scene script and use the transparent
-`visual-blender` wrapper, or the small convenience wrappers:
+All Blender production rendering and Cycles image-sequence workloads are executed
+remotely via **Colab CLI** (`visual-colab-prepare` → `colab_commands.sh`).
+Local Blender is used strictly for scene authoring, rapid composition/framing
+validation with lightweight EEVEE previews, and asset portability checks.
+
+Local preview workflow:
 
 ```sh
 visual-blender-preview --scene-script scenes/hero.py \
   --output media/previews/hero.png --width 1280 --height 720 --frame 1
-
-visual-blender-render --scene scene.blend --scene-script scenes/hero.py \
-  --output media/blender/frame_ --frame-start 1 --frame-end 240 \
-  --width 1920 --height 1080 --fps 30 --samples 128
 ```
 
-`visual-blender-preview` uses configurable EEVEE defaults and does not save the
-source `.blend`. `visual-blender-render` emits PNG sequences by default, with a
-JSON report of engine, color settings, render configuration, and configured
-Cycles device. A device listing is not proof of success: require a real render
-and verify its output before reporting a GPU result.
+`visual-blender-preview` uses configurable EEVEE defaults and does not save over
+the source `.blend`. For transparent CLI or batch inspection, `visual-blender`
+and `visual-blender-render` remain available locally. Read
+[`references/blender.md`](references/blender.md) for scene preparation, portable
+assets, and local preview commands.
 
-Before a final Cycles run: make an EEVEE preview, render representative Cycles
-frames including an expensive one, measure time and memory pressure, estimate
-the full cost, then compare that with remote setup and transfer overhead. Read
-[`references/blender.md`](references/blender.md) for device handling, portable
-assets, frame batches, and local commands.
+## Colab CLI for all Blender production rendering
 
-## Local first; remote only with authorization
+Manim, ordinary PyGfx, EEVEE previews, and final FFmpeg composition stay local
+by default. **All Blender Cycles renders and heavy simulation compute are
+routed to Colab CLI.**
 
-Manim, ordinary PyGfx, EEVEE previews, short Blender renders, and final FFmpeg
-composition stay local by default. Route Taichi CUDA or costly Cycles batches to
-Colab only after a reduced local benchmark shows a useful advantage.
+Prepare a portable Blender bundle locally:
 
-`visual-colab-prepare` only creates a minimal validated bundle and explicit
-commands; it never logs in, uploads, provisions a runtime, or starts a job.
-Colab remains optional and local-first. Before an action that uploads assets,
-starts remote computation, consumes GPU quota/credits, or allocates a new
-runtime, obtain explicit authorization in the current request. Never upload
-credentials, ADC files, SSH/private keys, browser profiles, unrelated
-repository files, `.env` files, or confidential datasets that were not
-explicitly included. If login is interactive, stop and ask the user to
-complete it.
+```sh
+visual-colab-prepare \
+  --scene scene.blend --scene-script scenes/hero.py --asset-dir assets \
+  --output render-job --width 1920 --height 1080 --fps 30 \
+  --frame-start 1 --frame-end 240 --samples 128 --device auto
+```
 
-The default reusable remote worker is named `visual-render` and requests a T4.
-The generated workflow checks the installed official Colab CLI for that named
-session before creating anything:
+`visual-colab-prepare` creates a self-contained, validated bundle with portable
+asset checks, `render_manifest.json`, `bootstrap.sh`, and `colab_commands.sh`.
+Starting a session, uploading assets, or consuming GPU quota requires explicit
+user authorization in that request. Never upload credentials, `.env` files, ADC
+paths, SSH keys, browser profiles, or unrelated repository data.
+
+The default reusable remote worker is named `visual-render` (requesting a T4 or
+configured GPU). Thanks to pre-built portable tarball installation and persistent
+session reuse (`reuse-before-create`):
 
 ```text
 job lifecycle:     prepare -> upload -> execute -> download -> verify
 session lifecycle: create -> reuse for zero or more jobs -> explicit stop
 ```
 
-If `visual-render` is healthy and reachable, reuse it without another
-allocation prompt; do not ask for a second allocation authorization solely
-because that already-authorized worker is reused for another job in the same
-explicit remote workflow. If it is absent, `colab_commands.sh` refuses to allocate a
-runtime unless it is run with the explicit `--allow-new-session` flag (or
-`COLAB_ALLOW_NEW_SESSION=1`). A session's accelerator is fixed for its
-lifetime: never report an existing T4 as L4/A100/H100, and use a different
-named session or stop the old one before requesting another accelerator.
-`COLAB_GPU` overrides the request for a new or explicitly named session, but
-the backend's actual hardware is checked before upload; there is no silent
-fallback. T4 is the default, and no accelerator is escalated automatically.
+- If `visual-render` is running and reachable, subsequent jobs reuse it
+  instantly (`COLAB_SESSION_ACTION=reused`, `REMOTE_BLENDER_ACTION=reused`) with
+  zero re-installation overhead.
+- If absent, `colab_commands.sh` allocates a runtime when authorized with
+  `--allow-new-session` (or `COLAB_ALLOW_NEW_SESSION=1`).
+- Normal jobs leave the reusable session running. Use `visual-colab-stop`
+  (or `./bin/visual-colab-stop`) when all remote rendering work is finished.
 
-Normal jobs leave the reusable session running. Use the separate
-`visual-colab-stop` helper (or `./bin/visual-colab-stop`) when remote work is
-finished. The generated script also supports the explicitly disposable
-`--stop-after-job` mode. A failed job does not stop a healthy shared session.
+Remote `/content` storage is ephemeral cache. Every job uses a unique remote
+directory under `/content/manim-toolchain/jobs/`, and generated PNG sequences
+and reports return to local storage. For Blender, maintain the standard flow:
+`remote Cycles PNG sequence -> local verification -> local FFmpeg composition`.
 
-Remote `/content` storage is ephemeral cache, not durable storage. Every job
-uses a unique remote directory under `/content/manim-toolchain/jobs/`, and
-important PNG/OpenEXR outputs and reports must return to local storage. For
-Blender, keep the flow `remote Cycles PNG sequence -> local verification ->
-local FFmpeg composition`; never depend on an artifact left in `/content` for
-correctness. The bundle is self-contained enough to bootstrap a fresh
-authorized session, while reusing an already-installed compatible Blender
-instead of reinstalling it on every job.
-
-Read [`references/colab.md`](references/colab.md) when preparing or evaluating
-remote work. It covers the `render-job/` manifest, upload boundary, and
-reusable-session policy, job isolation, and resumable image-sequence return
-flow.
+Read [`references/colab.md`](references/colab.md) for manifest structure,
+upload boundaries, session lifecycle, and verification details.
 
 ## Keep narration separate from notation
 
