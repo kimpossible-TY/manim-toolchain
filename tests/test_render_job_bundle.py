@@ -218,10 +218,15 @@ class RenderJobBundleTests(unittest.TestCase):
             self.assertIn('REMOTE_OUTPUT_ARCHIVE="/content/manim-toolchain-output-$JOB_ID.tar.gz"', commands)
             self.assertIn("COLAB_SESSION_LEFT_RUNNING", commands)
 
+            bootstrap = (bundle / "bootstrap.sh").read_text(encoding="utf-8")
             self.assertEqual(
                 subprocess.run(["bash", "-n", str(bundle / "bootstrap.sh")], check=False).returncode,
                 0,
             )
+            self.assertIn('BLENDER_VERSION="${BLENDER_VERSION:-4.2.3}"', bootstrap)
+            self.assertIn("BLENDER_TARBALL_URL", bootstrap)
+            self.assertIn("tar -xf", bootstrap)
+            self.assertNotIn("apt-get install", bootstrap)
             subprocess.run(
                 [sys.executable, "-m", "py_compile", str(bundle / "run_colab_job.py"), str(bundle / "cleanup_colab_job.py")],
                 cwd=ROOT,
