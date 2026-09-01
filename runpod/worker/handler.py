@@ -8,4 +8,4 @@ import runpod
 from core import handle_event
 
 
-runpod.serverless.start({"handler": handle_event})
+runpod.serverless.start({"handler": handle_event, "return_aggregate_stream": True})

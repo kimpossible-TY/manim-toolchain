@@ -9,7 +9,7 @@ from manim_toolchain import narration
 from rendercanvas.offscreen import RenderCanvas
 
 
-toolchain = Path("/Users/taeyoung/Developer/manim-toolchain")
+toolchain = Path("/Users/taeyoung/Developer/visual-explainer-toolchain")
 interpreter = Path(sys.executable).absolute()
 expected_environment = (toolchain / ".venv").absolute()
 if not interpreter.is_relative_to(expected_environment):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 from pathlib import Path
 import shutil
@@ -12,6 +13,7 @@ import sys
 import tarfile
 from tempfile import TemporaryDirectory
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 import zlib
 
@@ -151,6 +153,84 @@ class RunpodRenderJobTests(unittest.TestCase):
             )
             self.assertEqual(loaded["backend"], "runpod-serverless")
             self.assertEqual(chunk["frame_start"], 60)
+
+    def test_worker_progress_uses_frames_and_optional_cycles_samples(self) -> None:
+        worker = load_module("runpod_worker_progress_test", ROOT / "runpod" / "worker" / "core.py")
+        with TemporaryDirectory() as directory:
+            output = Path(directory)
+            (output / "frame_0001.png").write_bytes(b"non-empty")
+            event = worker._frame_progress(output, 1, 3)
+            self.assertEqual(event["frames_completed"], 1)
+            self.assertEqual(event["frames_total"], 3)
+            self.assertEqual(event["percent"], 33.3)
+            sample_event = worker._progress_from_line(
+                "Rendered 32 / 64 samples",
+                output=output,
+                frame_start=1,
+                frame_end=3,
+            )
+            self.assertIsNotNone(sample_event)
+            assert sample_event is not None
+            self.assertEqual(sample_event["samples_completed"], 32)
+            self.assertEqual(sample_event["samples_total"], 64)
+            cycles_event = worker._progress_from_line(
+                "BLENDER_CYCLES_PROGRESS frame=2 sample=16/32",
+                output=output,
+                frame_start=1,
+                frame_end=3,
+            )
+            self.assertIsNotNone(cycles_event)
+            assert cycles_event is not None
+            self.assertEqual(cycles_event["frame"], 2)
+            self.assertEqual(cycles_event["samples_completed"], 16)
+            self.assertEqual(cycles_event["samples_total"], 32)
+
+    def test_stream_refresh_persists_progress_without_printing_urls(self) -> None:
+        client = load_module("runpod_client_stream_test", ROOT / "scripts" / "runpod_client.py")
+
+        class FakeApi:
+            def stream(self, job_id: str) -> dict[str, object]:
+                return {
+                    "status": "IN_PROGRESS",
+                    "stream": [
+                        {
+                            "output": {
+                                "schema_version": 1,
+                                "type": "progress",
+                                "chunk_id": "chunk-0000-000001-000003",
+                                "phase": "render",
+                                "status": "IN_PROGRESS",
+                                "frames_completed": 2,
+                                "frames_total": 3,
+                                "percent": 66.7,
+                            }
+                        }
+                    ],
+                }
+
+        with TemporaryDirectory() as directory:
+            jobs_path = Path(directory) / "jobs.json"
+            state = {
+                "schema_version": 1,
+                "jobs": [
+                    {
+                        "chunk_id": "chunk-0000-000001-000003",
+                        "frame_start": 1,
+                        "frame_end": 3,
+                        "job_id": "job-1",
+                        "status": "IN_PROGRESS",
+                    }
+                ],
+            }
+            jobs_path.write_text(json.dumps(state), encoding="utf-8")
+            captured = io.StringIO()
+            with redirect_stdout(captured):
+                completed, failed = client.refresh_stream_state(FakeApi(), state, jobs_path)
+            self.assertEqual((completed, failed), (0, 0))
+            self.assertIn("RUNPOD_CHUNK chunk=chunk-0000-000001-000003 phase=render", captured.getvalue())
+            self.assertNotIn("https://", captured.getvalue())
+            updated = json.loads(jobs_path.read_text(encoding="utf-8"))
+            self.assertEqual(updated["jobs"][0]["progress"]["frames_completed"], 2)
 
     def test_safe_extract_rejects_traversal(self) -> None:
         utils = load_module("runpod_utils_test", ROOT / "scripts" / "runpod_job_utils.py")

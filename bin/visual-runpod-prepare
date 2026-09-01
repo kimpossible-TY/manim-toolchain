@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/visual-explainer-toolchain"
 exec "$TOOLCHAIN_DIR/bin/visual-python" "$TOOLCHAIN_DIR/scripts/prepare_runpod_render_job.py" "$@"

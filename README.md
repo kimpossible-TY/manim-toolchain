@@ -1,4 +1,4 @@
-# Explanation Visualization and Simulation Toolchain
+# Visual Explainer Toolchain
 
 [![Python 3.13.15](https://img.shields.io/badge/Python-3.13.15-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Manim 0.21.0](https://img.shields.io/badge/Manim-0.21.0-333333)](https://www.manim.community/)
@@ -47,7 +47,7 @@ Homebrew owns system-level executables only:
 
 Before installing or changing a formula, inspect `brew config`, `brew doctor`, `brew list --versions <formula>`, and the resolved executable path. Do not reinstall a working formula merely to refresh it.
 
-The central uv project owns every Python library, including Manim, Manim Voiceover, PyGfx, wgpu, rendercanvas, Taichi, `google-genai`, and the Python Typst binding. They belong only in `~/Developer/manim-toolchain/.venv`; never install them through Homebrew or global/user `pip`. Do not add `bpy` from PyPI; invoke Blender as `blender --background --python scene.py`.
+The central uv project owns every Python library, including Manim, Manim Voiceover, PyGfx, wgpu, rendercanvas, Taichi, `google-genai`, and the Python Typst binding. They belong only in `~/Developer/visual-explainer-toolchain/.venv`; never install them through Homebrew or global/user `pip`. Do not add `bpy` from PyPI; invoke Blender as `blender --background --python scene.py`.
 
 When rebuilding the environment, use the Homebrew interpreter explicitly and restore only the frozen lock:
 
@@ -75,13 +75,13 @@ Manim remains the default for clear explanation, notation, vector diagrams, grap
 `pyproject.toml` and `uv.lock` are the only dependency source of truth. The global commands are symlinks into this repository:
 
 ```text
-~/.local/bin/manim-video   -> ~/Developer/manim-toolchain/bin/manim-video
-~/.local/bin/visual-python -> ~/Developer/manim-toolchain/bin/visual-python
-~/.local/bin/visual-blender -> ~/Developer/manim-toolchain/bin/visual-blender
-~/.local/bin/visual-blender-preview -> ~/Developer/manim-toolchain/bin/visual-blender-preview
-~/.local/bin/visual-blender-render -> ~/Developer/manim-toolchain/bin/visual-blender-render
-~/.local/bin/visual-runpod -> ~/Developer/manim-toolchain/bin/visual-runpod
-~/.local/bin/visual-runpod-prepare -> ~/Developer/manim-toolchain/bin/visual-runpod-prepare
+~/.local/bin/manim-video   -> ~/Developer/visual-explainer-toolchain/bin/manim-video
+~/.local/bin/visual-python -> ~/Developer/visual-explainer-toolchain/bin/visual-python
+~/.local/bin/visual-blender -> ~/Developer/visual-explainer-toolchain/bin/visual-blender
+~/.local/bin/visual-blender-preview -> ~/Developer/visual-explainer-toolchain/bin/visual-blender-preview
+~/.local/bin/visual-blender-render -> ~/Developer/visual-explainer-toolchain/bin/visual-blender-render
+~/.local/bin/visual-runpod -> ~/Developer/visual-explainer-toolchain/bin/visual-runpod
+~/.local/bin/visual-runpod-prepare -> ~/Developer/visual-explainer-toolchain/bin/visual-runpod-prepare
 ```
 
 `manim-video` runs the central Manim CLI and may load Gemini settings only from this repository's protected `.env`. `visual-python` runs ordinary Python with the central PyGfx/Taichi stack and always uses `--no-env-file`; it removes narration credential variables from its child process.
@@ -94,7 +94,7 @@ The equivalent generic invocation is:
 
 ```sh
 uv run \
-  --project /Users/taeyoung/Developer/manim-toolchain \
+  --project /Users/taeyoung/Developer/visual-explainer-toolchain \
   --frozen \
   --no-managed-python \
   --no-env-file \
@@ -104,7 +104,7 @@ uv run \
 The shared Manim config is also owned here:
 
 ```text
-~/.config/manim/manim.cfg -> ~/Developer/manim-toolchain/manim.cfg
+~/.config/manim/manim.cfg -> ~/Developer/visual-explainer-toolchain/manim.cfg
 ```
 
 A video repository may override it with a local `manim.cfg`.
@@ -113,10 +113,10 @@ A video repository may override it with a local `manim.cfg`.
 
 The repository owns two tracked skills:
 
-- `skills/manim-toolchain` routes and verifies the shared explanation visualization workflow.
+- `skills/visual-explainer-toolchain` routes and verifies the shared explanation visualization workflow.
 - `skills/publish-typst-supplement` publishes large generated supplements as versioned GitHub Release assets.
 
-Codex discovers them through symlinks in `~/.codex/skills`. Keep the repository copies authoritative. For non-trivial Typst scene authoring, pair `manim-toolchain` with the separately maintained [`my-typst-style`](https://github.com/kimpossible-TY/typst-packages/tree/main/skills/my-typst-style) skill.
+Codex discovers them through symlinks in `~/.codex/skills`. Keep the repository copies authoritative. For non-trivial Typst scene authoring, pair `visual-explainer-toolchain` with the separately maintained [`my-typst-style`](https://github.com/kimpossible-TY/typst-packages/tree/main/skills/my-typst-style) skill.
 
 ## Use from another video repository
 
@@ -154,7 +154,7 @@ This is a convention, not a requirement. Preserve an existing project's layout a
 Production PyGfx scenes use `rendercanvas.offscreen.RenderCanvas`, render deterministic RGBA frames, and pipe them to FFmpeg. No visible window or manual interaction is required. The maintained smoke scene is a small, readable template using upstream APIs directly:
 
 ```sh
-visual-python /Users/taeyoung/Developer/manim-toolchain/scenes/pygfx_smoke_test.py \
+visual-python /Users/taeyoung/Developer/visual-explainer-toolchain/scenes/pygfx_smoke_test.py \
   --output media/renders/mesh-smoke.mp4
 ```
 
@@ -175,11 +175,11 @@ Taichi 1.7.4's kernel parser is not compatible with postponed annotations on Pyt
 The combined smoke test supports explicit backend checks:
 
 ```sh
-visual-python /Users/taeyoung/Developer/manim-toolchain/scenes/taichi_pygfx_smoke_test.py \
+visual-python /Users/taeyoung/Developer/visual-explainer-toolchain/scenes/taichi_pygfx_smoke_test.py \
   --arch metal \
   --output media/simulations/particles.png
 
-visual-python /Users/taeyoung/Developer/manim-toolchain/scenes/taichi_pygfx_smoke_test.py \
+visual-python /Users/taeyoung/Developer/visual-explainer-toolchain/scenes/taichi_pygfx_smoke_test.py \
   --arch cpu --numerical-only
 ```
 
@@ -208,7 +208,8 @@ visual-runpod-prepare \
 # Only visual-runpod loads these values; they are never bundled.
 visual-runpod submit --bundle render-job --r2
 
-visual-runpod wait --jobs-file render-job.runpod.json --download
+# Follow live chunk/frame progress and download when complete.
+visual-runpod progress --jobs-file render-job.runpod.json --download
 visual-runpod retry --jobs-file render-job.runpod.json
 visual-runpod cleanup --jobs-file render-job.runpod.json --confirm
 ```
@@ -221,7 +222,7 @@ options remain available for S3-compatible providers other than R2.
 Downloaded frames and reports are verified locally, then composed with FFmpeg:
 
 ```sh
-visual-python /Users/taeyoung/Developer/manim-toolchain/scripts/verify_frame_sequence.py \
+visual-python /Users/taeyoung/Developer/visual-explainer-toolchain/scripts/verify_frame_sequence.py \
   --directory render-job/output --prefix frame_ --frame-start 1 --frame-end 240 \
   --width 1920 --height 1080
 ```
@@ -252,6 +253,9 @@ Use a queue-based endpoint with a small active-worker floor and a max-worker lim
 ```sh
 # Inspect an already-submitted batch:
 visual-runpod status --jobs-file render-job.runpod.json
+
+# Follow Runpod /stream events: phase, chunk, frame count, and percentage.
+visual-runpod progress --jobs-file render-job.runpod.json
 
 # Download only after every chunk is complete:
 visual-runpod download --jobs-file render-job.runpod.json
@@ -385,7 +389,7 @@ Gemini credentials remain isolated in this repository. `manim-video` loads only 
 Configure API-key mode privately:
 
 ```sh
-cd /Users/taeyoung/Developer/manim-toolchain
+cd /Users/taeyoung/Developer/visual-explainer-toolchain
 cp .env.example .env
 chmod 600 .env
 ${EDITOR:-vi} .env
@@ -398,7 +402,7 @@ ADC remains available when the central `.env` selects `GEMINI_AUTH_MODE=adc` and
 Install exactly the committed environment and run credential-independent validation:
 
 ```sh
-cd /Users/taeyoung/Developer/manim-toolchain
+cd /Users/taeyoung/Developer/visual-explainer-toolchain
 uv sync --frozen --no-managed-python
 ./scripts/check_environment.sh
 ./scripts/render_smoke_tests.sh --typst-only
@@ -444,7 +448,7 @@ uv sync --frozen --no-managed-python
 
 Commit `pyproject.toml` and `uv.lock` together only after the real render and isolation tests pass. Never install these dependencies manually into `.venv` or add them to individual video projects.
 
-The tracked Codex skill lives at `skills/manim-toolchain`; its installed path is a symlink back to this repository. Edit the tracked copy and validate it with the Codex skill validator.
+The tracked Codex skill lives at `skills/visual-explainer-toolchain`; its installed path is a symlink back to this repository. Edit the tracked copy and validate it with the Codex skill validator.
 
 ## Official references
 

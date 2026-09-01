@@ -103,7 +103,8 @@ chunk automatically:
 visual-runpod submit --bundle render-job --r2 \
   --execution-timeout-ms 3600000 --ttl-ms 86400000
 
-visual-runpod wait --jobs-file render-job.runpod.json --download
+# Follow live phase/frame progress and download when complete:
+visual-runpod progress --jobs-file render-job.runpod.json --download
 
 # Retry terminally failed chunks with fresh R2 URLs:
 visual-runpod retry --jobs-file render-job.runpod.json
@@ -163,6 +164,20 @@ visual-runpod download --jobs-file render-job.runpod.json
 `download` verifies each archive digest and frame range, rejects conflicting
 frames, merges all chunks, and writes `output/render_report.json`. Only after
 that local verification should the frames be passed to FFmpeg.
+
+For live progress, use the stream-aware command:
+
+```sh
+visual-runpod progress --jobs-file render-job.runpod.json
+# Equivalent wait mode for scripts:
+visual-runpod wait --jobs-file render-job.runpod.json --stream --download
+```
+
+The worker emits bounded events for download, extraction, asset validation,
+render, verification, and upload. During rendering, completed non-empty PNGs
+provide reliable frame progress even when Blender does not print sample updates.
+If Blender emits Cycles sample statistics, the CLI includes them; signed URLs
+are never printed.
 
 `retry` resubmits only failed R2 chunks and keeps the same verified input
 archive. `cleanup` is explicit and confirmation-gated because presigned URLs

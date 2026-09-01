@@ -138,6 +138,9 @@ class RunpodApi:
     def status(self, job_id: str) -> dict[str, object]:
         return self.request("GET", f"/status/{quote(job_id, safe='')}")
 
+    def stream(self, job_id: str) -> dict[str, object]:
+        return self.request("GET", f"/stream/{quote(job_id, safe='')}")
+
 
 def _upload_with_curl(url: str, source: Path) -> None:
     completed = subprocess.run(
@@ -381,8 +384,93 @@ def submit(args: argparse.Namespace) -> int:
             raise
     print(f"RUNPOD_JOBS_FILE={jobs_path}")
     if args.wait or args.download:
-        return wait_for_jobs(args, jobs_path, download=args.download)
+        return wait_for_jobs(args, jobs_path, download=args.download, stream=args.stream)
     return 0
+
+
+def _apply_job_output(record: dict[str, object], output: object) -> None:
+    outputs = output if isinstance(output, list) else [output]
+    for item in outputs:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "progress":
+            record["progress"] = item
+            continue
+        if item.get("type") == "result" or "archive_sha256" in item:
+            record["result"] = item
+            if not record.get("output_download_url") and item.get("output_download_url"):
+                record["output_download_url"] = item["output_download_url"]
+
+
+def _stream_outputs(response: dict[str, object]) -> list[dict[str, object]]:
+    raw = response.get("stream")
+    if not isinstance(raw, list):
+        return []
+    outputs: list[dict[str, object]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        value = item.get("output", item)
+        if isinstance(value, dict):
+            outputs.append(value)
+    return outputs
+
+
+def _print_progress_event(record: dict[str, object], event: dict[str, object]) -> None:
+    parts = [
+        f"chunk={record.get('chunk_id')}",
+        f"phase={event.get('phase', 'unknown')}",
+        f"status={event.get('status', 'IN_PROGRESS')}",
+    ]
+    if "percent" in event:
+        parts.append(f"percent={event['percent']}")
+    if "frames_completed" in event and "frames_total" in event:
+        parts.append(f"frames={event['frames_completed']}/{event['frames_total']}")
+    if "frame" in event:
+        parts.append(f"frame={event['frame']}")
+    if "samples_completed" in event:
+        samples = str(event["samples_completed"])
+        if "samples_total" in event:
+            samples += f"/{event['samples_total']}"
+        parts.append(f"samples={samples}")
+    print("RUNPOD_CHUNK " + " ".join(parts))
+
+
+def _print_batch_progress(state: dict[str, object]) -> None:
+    jobs = state.get("jobs")
+    if not isinstance(jobs, list):
+        return
+    completed = failed = active = 0
+    frames_completed = frames_total = 0
+    for record in jobs:
+        if not isinstance(record, dict):
+            continue
+        start, end = record.get("frame_start"), record.get("frame_end")
+        if isinstance(start, int) and isinstance(end, int) and end >= start:
+            chunk_frames = end - start + 1
+            frames_total += chunk_frames
+        else:
+            chunk_frames = 0
+        status = str(record.get("status", ""))
+        if status == "COMPLETED":
+            completed += 1
+            frames_completed += chunk_frames
+        elif status in TERMINAL_STATUSES:
+            failed += 1
+        else:
+            active += 1
+            progress = record.get("progress")
+            if isinstance(progress, dict):
+                value = progress.get("frames_completed")
+                if isinstance(value, int):
+                    frames_completed += min(max(value, 0), chunk_frames)
+    total = len(jobs)
+    percent = round(frames_completed / frames_total * 100, 1) if frames_total else 0.0
+    print(
+        "RUNPOD_PROGRESS "
+        f"completed={completed} active={active} failed={failed} total={total} "
+        f"frames={frames_completed}/{frames_total} percent={percent}"
+    )
 
 
 def refresh_state(api: RunpodApi, state: dict[str, object], jobs_path: Path) -> tuple[int, int]:
@@ -404,34 +492,88 @@ def refresh_state(api: RunpodApi, state: dict[str, object], jobs_path: Path) -> 
         if not isinstance(job_id, str):
             raise RunpodError("job record has no job id")
         response = api.status(job_id)
+        previous_status = status
         status = str(response.get("status", "UNKNOWN"))
         record["status"] = status
         record["last_status"] = response
-        output = response.get("output")
-        if isinstance(output, dict):
-            record["result"] = output
-            if not record.get("output_download_url") and output.get("output_download_url"):
-                record["output_download_url"] = output["output_download_url"]
+        _apply_job_output(record, response.get("output"))
         if status == "COMPLETED":
             completed += 1
         elif status in TERMINAL_STATUSES:
             failed += 1
-        print(f"RUNPOD_STATUS chunk={record.get('chunk_id')} status={status}")
+        if status != previous_status:
+            print(f"RUNPOD_STATUS chunk={record.get('chunk_id')} status={status}")
     _atomic_write_json(jobs_path, state)
     return completed, failed
 
 
-def wait_for_jobs(args: argparse.Namespace, jobs_path: Path, *, download: bool = False) -> int:
+def refresh_stream_state(api: RunpodApi, state: dict[str, object], jobs_path: Path) -> tuple[int, int]:
+    """Drain incremental worker progress from every active job."""
+
+    jobs = state.get("jobs")
+    if not isinstance(jobs, list):
+        raise RunpodError("jobs file has no jobs list")
+    completed = failed = 0
+    for record in jobs:
+        if not isinstance(record, dict):
+            raise RunpodError("jobs file contains an invalid job record")
+        status = str(record.get("status", ""))
+        if status in TERMINAL_STATUSES:
+            if status == "COMPLETED":
+                completed += 1
+            else:
+                failed += 1
+            continue
+        job_id = record.get("job_id")
+        if not isinstance(job_id, str):
+            raise RunpodError("job record has no job id")
+        try:
+            response = api.stream(job_id)
+        except RunpodError:
+            # Keep progress usable for jobs created by an older worker or an
+            # endpoint version that does not expose stream responses.
+            response = api.status(job_id)
+        for output in _stream_outputs(response):
+            previous = record.get("progress")
+            _apply_job_output(record, output)
+            if output.get("type") == "progress" and output != previous:
+                _print_progress_event(record, output)
+        previous_status = status
+        status = str(response.get("status", "UNKNOWN"))
+        record["status"] = status
+        if status == "COMPLETED" and not isinstance(record.get("result"), dict):
+            fallback = api.status(job_id)
+            _apply_job_output(record, fallback.get("output"))
+        if status == "COMPLETED":
+            completed += 1
+        elif status in TERMINAL_STATUSES:
+            failed += 1
+        if status != previous_status:
+            print(f"RUNPOD_STATUS chunk={record.get('chunk_id')} status={status}")
+    _atomic_write_json(jobs_path, state)
+    return completed, failed
+
+
+def wait_for_jobs(
+    args: argparse.Namespace,
+    jobs_path: Path,
+    *,
+    download: bool = False,
+    stream: bool = False,
+) -> int:
     state = _load_json(jobs_path)
     api = _api_from_args(args, state)
     jobs = state.get("jobs")
     if not isinstance(jobs, list) or not jobs:
         raise RunpodError("jobs file contains no jobs")
+    total = len(jobs)
     deadline = time.monotonic() + args.max_wait_seconds if args.max_wait_seconds else None
     while True:
-        completed, failed = refresh_state(api, state, jobs_path)
-        total = len(jobs)
-        print(f"RUNPOD_PROGRESS completed={completed} failed={failed} total={total}")
+        if stream:
+            completed, failed = refresh_stream_state(api, state, jobs_path)
+        else:
+            completed, failed = refresh_state(api, state, jobs_path)
+        _print_batch_progress(state)
         if completed + failed == total:
             if failed:
                 return 2
@@ -692,6 +834,9 @@ def build_parser() -> argparse.ArgumentParser:
     submit_parser.add_argument("--jobs-file")
     submit_parser.add_argument("--wait", action="store_true")
     submit_parser.add_argument("--download", action="store_true")
+    submit_parser.add_argument(
+        "--stream", action="store_true", help="show incremental chunk progress while waiting"
+    )
     submit_parser.add_argument("--poll-seconds", type=float, default=5.0)
     submit_parser.add_argument("--max-wait-seconds", type=float)
 
@@ -701,8 +846,18 @@ def build_parser() -> argparse.ArgumentParser:
         command_parser.add_argument("--poll-seconds", type=float, default=5.0)
         command_parser.add_argument("--max-wait-seconds", type=float)
         command_parser.add_argument("--download", action="store_true")
+        command_parser.add_argument(
+            "--stream", action="store_true", help="show incremental chunk progress"
+        )
     download_parser = subparsers.add_parser("download", help="download and merge completed chunks")
     download_parser.add_argument("--jobs-file", required=True)
+    progress_parser = subparsers.add_parser(
+        "progress", help="follow live chunk/frame progress from Runpod /stream"
+    )
+    progress_parser.add_argument("--jobs-file", required=True)
+    progress_parser.add_argument("--poll-seconds", type=float, default=2.0)
+    progress_parser.add_argument("--max-wait-seconds", type=float)
+    progress_parser.add_argument("--download", action="store_true")
     retry_parser = subparsers.add_parser("retry", help="resubmit terminally failed R2 chunks")
     retry_parser.add_argument("--jobs-file", required=True)
     retry_parser.add_argument("--r2-bucket")
@@ -724,7 +879,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     try:
-        if args.command in {"submit", "status", "wait"}:
+        if args.command in {"submit", "status", "wait", "progress"}:
             if args.poll_seconds <= 0:
                 raise RunpodError("--poll-seconds must be positive")
             if args.max_wait_seconds is not None and args.max_wait_seconds <= 0:
@@ -739,10 +894,22 @@ def main() -> int:
             path = Path(args.jobs_file).expanduser().resolve()
             state = _load_json(path)
             completed, failed = refresh_state(_api_from_args(args, state), state, path)
-            print(f"RUNPOD_PROGRESS completed={completed} failed={failed} total={len(state['jobs'])}")
+            _print_batch_progress(state)
             return 2 if failed else 0
         if args.command == "wait":
-            return wait_for_jobs(args, Path(args.jobs_file).expanduser().resolve(), download=args.download)
+            return wait_for_jobs(
+                args,
+                Path(args.jobs_file).expanduser().resolve(),
+                download=args.download,
+                stream=args.stream,
+            )
+        if args.command == "progress":
+            return wait_for_jobs(
+                args,
+                Path(args.jobs_file).expanduser().resolve(),
+                download=args.download,
+                stream=True,
+            )
         if args.command == "download":
             return download_results(Path(args.jobs_file).expanduser().resolve())
         if args.command == "retry":

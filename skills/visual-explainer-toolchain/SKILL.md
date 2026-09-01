@@ -1,11 +1,11 @@
 ---
-name: manim-toolchain
-description: Create or verify intuition-first mathematical animation, scientific 3D visualization, simulation, or selectively high-fidelity mixed video with the shared Manim, PyGfx, Taichi, Blender, and FFmpeg toolchain.
+name: visual-explainer-toolchain
+description: Create or verify clear explanatory videos, scientific 3D visualizations, simulations, and selectively high-fidelity mixed-media segments with the shared Manim, PyGfx, Taichi, Blender, and FFmpeg toolchain.
 ---
 
-# Mathematical Visualization Toolchain
+# Visualization & Video Toolchain
 
-Use the maintained central project at `~/Developer/manim-toolchain`. Its
+Use the maintained central project at `~/Developer/visual-explainer-toolchain`. Its
 `pyproject.toml` and `uv.lock` own ManimCE, Manim Voiceover, Gemini, Python
 Typst, PyGfx/wgpu/rendercanvas, and Taichi. Video projects own only their
 scenes, assets, configuration, and generated media.
@@ -33,56 +33,96 @@ honor an explicit override unless a concrete constraint makes it impossible.
   `visual-runpod` is the only wrapper allowed to load them. Never put keys, ADC
   paths, browser profiles, or secrets into a scene, `.blend`, manifest, render
   bundle, or log.
-- Prefer `from manim import Typst, MathTypst`; do not add a LaTeX distribution.
-
 ## Route each segment
 
-Plan the intuition and visual transformation before choosing technology.
+Choose technology after identifying the visual job that each segment must do.
 
 | Need | Route |
 | --- | --- |
-| Equations, diagrams, labels, transformations, graphs, explanatory 2D, or simple clear 3D | Manim |
+| Animated diagrams, labels, graphs, motion graphics, explanatory 2D, or simple clear 3D | Manim |
 | Meshes, surfaces, point clouds, spatial fields, camera perspective, or lightweight scientific 3D | PyGfx |
 | Analytically prescribed motion with modest state | NumPy + PyGfx |
 | Many evolving particles/grids/fields, PDEs, or compute-heavy deformation | Taichi + PyGfx |
-| Materials, lighting, anatomy, imported assets, volumetrics, rigging, or a cinematic hero shot that materially benefits | Blender (Runpod Serverless) |
-| Distinct explanatory and high-fidelity/numerical beats in one story | Mixed segments + FFmpeg |
+| Materials, lighting, anatomy, imported assets, volumetrics, rigging, or a cinematic shot that materially benefits | Blender (Runpod Serverless) |
+| Beats that need different rendering strengths | Mixed segments + FFmpeg |
 
 Do not choose Blender because an object is three-dimensional, or Taichi because
-an object moves. Blender normally contributes one or a few valuable shots;
-Manim keeps the mathematical story legible.
+an object moves. Blender normally contributes one or a few shots whose material
+or lighting makes a visible difference; Manim keeps explanatory graphics clear.
 
 Useful routing checks:
 
-- Moving vector-field divergence: Manim; use PyGfx only if genuine spatial 3D
-  adds insight.
-- Triangulated sphere: PyGfx.
-- Twenty-thousand particles in a vortex: Taichi + PyGfx, then benchmark local
+- An annotated process or product-flow diagram: Manim.
+- A triangulated model or spatial dataset: PyGfx.
+- Tens of thousands of evolving particles: Taichi + PyGfx; benchmark locally
   before considering remote compute.
-- Realistic translucent bladder: Blender (rendered via Runpod Serverless).
-- Equations, anatomical shot, and flow-rate graph: Manim + short Blender shot
-  (Runpod Serverless) + FFmpeg.
-- A rotating cube: Manim or PyGfx unless realistic rendering is explicitly
+- A realistic translucent organ, material, or environment: Blender (rendered
+  via Runpod Serverless).
+- An explainer plus one photorealistic establishing shot: Manim + short Blender
+  shot (Runpod Serverless) + FFmpeg.
+- A rotating object: Manim or PyGfx unless realistic rendering is explicitly
   valuable.
 
 For PyGfx and Taichi implementation details, including deterministic offscreen
 rendering, backend policy, and reproducibility fields, read
 [`references/pygfx-taichi.md`](references/pygfx-taichi.md).
 
-## Tell one mixed educational story
+## Apply subject-specific direction deliberately
 
-Use engines for successive beats of one idea, not as disconnected demos:
+Technology selection is not a story template. Decide the viewer, message,
+emotional tone, and information sequence from the subject instead of forcing a
+mathematical-explainer structure onto every topic.
 
-```text
-Manim question/equation -> Manim geometric intuition
-  -> PyGfx or Taichi/PyGfx numerical manifestation
-  -> optional Blender hero shot (Runpod Serverless) -> Manim interpretation
-```
+For a mathematics educational video, read
+[`references/math-educational-video.md`](references/math-educational-video.md)
+before storyboarding. Its pedagogy, equation timing, and notation guidance are
+specific to that format and must not be applied by default to other subjects.
 
-Set resolution, FPS, background/color language, narration cadence, and
-transition frames before rendering. Use the composition reference when the
-result combines segments or separate narration:
-[`references/composition.md`](references/composition.md).
+For a medical, clinical-procedure, vaccine, pharmaceutical, or healthcare
+marketing video, read
+[`references/medical-video.md`](references/medical-video.md) before drafting
+claims or storyboarding. It defines patient-education direction and mandatory
+clinical, regulatory, and advertising-review gates; it is not medical or legal
+approval for a particular script.
+
+For any multi-segment video or independently produced narration, read
+[`references/composition.md`](references/composition.md) before rendering to
+settle shared technical delivery settings and transitions.
+
+## Required Blender render-mode confirmation
+
+Before starting any Blender render, determine whether the user wants a local
+EEVEE test/preview or a Runpod Serverless Cycles production render. If the
+request does not explicitly identify the mode, pause and ask one concise
+question before running a render command:
+
+> 이번 Blender 렌더는 (1) 로컬 EEVEE 테스트/프리뷰로 실행할까요, 아니면
+> (2) Runpod Serverless Cycles 제작 렌더로 실행할까요?
+
+Do not infer the mode from the presence of a Blender scene, a `--workers`
+option, or a previous command. Do not start an expensive render while waiting
+for the answer. A request that explicitly says `preview`, `test`, `local`, or
+`EEVEE` selects the local path; a request that explicitly says `production`,
+`Cycles`, `GPU`, or `Runpod` selects the Runpod path.
+
+Once the mode is selected, state the choice briefly before execution and keep
+the paths separate:
+
+- **Local EEVEE test/preview:** use `visual-blender-preview` for a frame or a
+  small diagnostic range. If multiple local workers are required, write PNGs
+  and reports to `/private/tmp` (or another explicitly local scratch path),
+  never to an iCloud-synchronized project directory. This path is for
+  validation and framing, not final production quality.
+- **Runpod Serverless Cycles production:** use
+  `visual-runpod-prepare` → `visual-runpod submit` and the configured R2
+  storage flow. Do not substitute local `parallel_blender_render.py`; one
+  request maps to one remote GPU/Blender process, and chunk parallelism belongs
+  to the endpoint queue. Tell the user that the job incurs Runpod usage cost
+  and show the live progress command before or alongside submission.
+
+If the user asks for both, run the local EEVEE validation first, report its
+result, and request or confirm the transition to the Runpod production render
+before submitting the paid job.
 
 ## Blender renders via Runpod Serverless; EEVEE for local preview
 
@@ -92,7 +132,7 @@ remotely via **Runpod Serverless** (`visual-runpod-prepare` →
 composition/framing validation with lightweight EEVEE previews. Asset
 portability validation runs in the worker by default.
 
-Local preview workflow:
+Local preview workflow (explicitly selected local mode only):
 
 ```sh
 visual-blender-preview --scene-script scenes/hero.py \
@@ -101,7 +141,9 @@ visual-blender-preview --scene-script scenes/hero.py \
 
 `visual-blender-preview` uses configurable EEVEE defaults and does not save over
 the source `.blend`. For transparent CLI or batch inspection, `visual-blender`
-and `visual-blender-render` remain available locally. Read
+and `visual-blender-render` remain available locally. When using local parallel
+workers, point frame and report outputs to `/private/tmp` or another local
+scratch directory, especially when the project is inside iCloud Drive. Read
 [`references/blender.md`](references/blender.md) for scene preparation, portable
 assets, and local preview commands.
 
@@ -145,7 +187,8 @@ batch with automatic R2 presigning:
 
 ```sh
 visual-runpod submit --bundle render-job --r2
-visual-runpod wait --jobs-file render-job.runpod.json --download
+# Follow live chunk/frame progress through Runpod /stream:
+visual-runpod progress --jobs-file render-job.runpod.json --download
 # Retry only failed R2 chunks with fresh signed URLs:
 visual-runpod retry --jobs-file render-job.runpod.json
 # After verifying and retaining the local output, delete this batch from R2:
@@ -158,34 +201,35 @@ URL; the client verifies every chunk and the merged sequence locally. For
 Blender, maintain the standard flow:
 `remote Cycles PNG sequence -> local verification -> local FFmpeg composition`.
 
+`progress` drains bounded worker events from Runpod `/stream` and prints phase,
+chunk, completed-frame count, and percentage without printing signed URLs. Frame
+progress is based on non-empty PNGs and remains reliable across Blender builds;
+sample fields are included when Blender emits sample statistics. Use
+`wait --stream` when a script should retain the normal wait command while
+showing the same live progress.
+
 Read [`references/runpod.md`](references/runpod.md) for the manifest, signed URL
 boundary, worker image, chunk orchestration, and verification details.
 
-## Keep narration separate from notation
+## Keep narration separate from visual source
 
-Use visual Typst independently from spoken prose:
-
-```python
-visual = MathTypst(r"u_(t t) = c^2 Delta u")
-narration = "Each point accelerates according to its local curvature."
-```
-
-Never send raw Typst, LaTeX-like source, code, or implementation notation to
-Gemini TTS. Use Manim Voiceover only where it owns the timing naturally; create
-narration for PyGfx/Blender independently when that makes the composition
-clearer. Do not force a non-Manim segment into Manim Voiceover.
+Write spoken prose separately from on-screen copy, code, markup, and rendering
+notation. Never send raw source or implementation syntax to Gemini TTS. Use
+Manim Voiceover only where it owns the timing naturally; create narration for
+PyGfx or Blender independently when that makes the composition clearer. Do not
+force a non-Manim segment into Manim Voiceover.
 
 ## Verify observable results
 
 Do not claim success based on imports or device enumeration. Render requested
-scenes and inspect valid, non-empty, non-uniform outputs; check Taichi numerical
+scenes and inspect valid, non-empty, non-uniform outputs; check simulation
 state; use FFprobe for video; and retain seeds, step count, time step, backend,
 and floating-point policy where they affect reproducibility.
 
 Central credential-independent validation:
 
 ```sh
-cd ~/Developer/manim-toolchain
+cd ~/Developer/visual-explainer-toolchain
 ./scripts/check_environment.sh
 ./scripts/render_smoke_tests.sh --typst-only
 ./scripts/render_smoke_tests.sh --visualization-only

@@ -1,7 +1,7 @@
 [project]
-name = "manim-toolchain"
+name = "visual-explainer-toolchain"
 version = "0.1.0"
-description = "Reusable mathematical visualization and simulation toolchain."
+description = "Reusable explanatory-video, scientific-visualization, and simulation toolchain."
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "manim[typst]==0.21.0",
@@ -15,3 +15,6 @@ dependencies = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/manim_toolchain"]

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/visual-explainer-toolchain"
 
 if [[ ! -f "$TOOLCHAIN_DIR/pyproject.toml" || ! -f "$TOOLCHAIN_DIR/uv.lock" ]]; then
     printf 'Central visualization toolchain is incomplete: %s\n' "$TOOLCHAIN_DIR" >&2

@@ -1,4 +1,4 @@
-# Mixed-scene composition
+# Video composition
 
 Render each engine's segment independently, then compose reproducibly:
 
@@ -51,4 +51,4 @@ For mismatched segments, use a documented FFmpeg filter graph that explicitly
 scales, sets FPS, controls color conversion, and handles alpha. Generate
 narration independently for non-Manim scenes when that is clearer than forcing
 Manim Voiceover to own their timeline. Keep the spoken transcript separate from
-on-screen Typst or implementation syntax.
+on-screen source, notation, or implementation syntax.

@@ -47,7 +47,7 @@ work.
    The downloaded image sequence and render report are verified locally:
 
    ```sh
-   visual-python ~/Developer/manim-toolchain/scripts/verify_frame_sequence.py \
+   visual-python ~/Developer/visual-explainer-toolchain/scripts/verify_frame_sequence.py \
      --directory render-job/output --prefix frame_ --frame-start 1 --frame-end 240 \
      --width 1920 --height 1080
    ```

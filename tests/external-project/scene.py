@@ -8,7 +8,7 @@ from manim import FadeIn, MathTypst, Scene, Typst, UP
 
 class TestScene(Scene):
     def construct(self):
-        toolchain = Path("/Users/taeyoung/Developer/manim-toolchain")
+        toolchain = Path("/Users/taeyoung/Developer/visual-explainer-toolchain")
         interpreter = Path(sys.executable).absolute()
         expected_environment = (toolchain / ".venv").absolute()
 

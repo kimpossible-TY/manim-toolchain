@@ -48,7 +48,7 @@ def render(scene: object, output: Path) -> None:
 
 def main() -> None:
     scene = build_scene()
-    with tempfile.TemporaryDirectory(prefix="manim-toolchain-blender-") as directory:
+    with tempfile.TemporaryDirectory(prefix="visual-explainer-blender-") as directory:
         output_dir = Path(directory)
         available_engines = {
             item.identifier for item in scene.render.bl_rna.properties["engine"].enum_items

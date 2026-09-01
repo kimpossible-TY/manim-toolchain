@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/visual-explainer-toolchain"
 readonly HOMEBREW_PREFIX="/opt/homebrew"
 readonly HOMEBREW_PYTHON="$HOMEBREW_PREFIX/opt/python@3.13/bin/python3.13"
 readonly -a HOMEBREW_FORMULAE=(uv python@3.13 typst ffmpeg sox)
@@ -118,7 +118,7 @@ from rendercanvas.offscreen import RenderCanvas
 import taichi
 import wgpu
 
-toolchain = Path("/Users/taeyoung/Developer/manim-toolchain")
+toolchain = Path("/Users/taeyoung/Developer/visual-explainer-toolchain")
 interpreter = Path(sys.executable).absolute()
 expected_environment = (toolchain / ".venv").absolute()
 homebrew_python = Path("/opt/homebrew/opt/python@3.13/bin/python3.13").resolve()

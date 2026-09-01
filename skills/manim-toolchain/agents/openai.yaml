@@ -1,4 +1,0 @@
-interface:
-  display_name: "Manim Toolchain"
-  short_description: "Create intuition-first math and scientific visuals"
-  default_prompt: "Use $manim-toolchain to create an intuition-first mathematical or scientific visualization with the lightest suitable renderer."

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/visual-explainer-toolchain"
 readonly MANIM_VIDEO="$TOOLCHAIN_DIR/bin/manim-video"
 readonly VISUAL_PYTHON="$TOOLCHAIN_DIR/bin/visual-python"
 readonly BLENDER_PREVIEW="$TOOLCHAIN_DIR/bin/visual-blender-preview"
@@ -171,7 +171,7 @@ render_blender() {
         --image "$cycles_output" --report "$cycles_report" \
         --engine CYCLES --width 128 --height 72
 
-    job_parent="$(mktemp -d /tmp/manim-toolchain-render-job.XXXXXX)"
+    job_parent="$(mktemp -d /tmp/visual-explainer-render-job.XXXXXX)"
     source_blend="$job_parent/source.blend"
     job_dir="$job_parent/render-job"
     "$BLENDER" --background --python scripts/blender_render.py -- \

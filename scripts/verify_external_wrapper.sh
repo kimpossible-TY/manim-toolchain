@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/visual-explainer-toolchain"
 readonly FIXTURE_DIR="$TOOLCHAIN_DIR/tests/external-project"
 readonly LOG_DIR="$TOOLCHAIN_DIR/media/logs"
 readonly BLENDER_PREVIEW="$TOOLCHAIN_DIR/bin/visual-blender-preview"
@@ -10,7 +10,7 @@ readonly VISUAL_PYTHON="$TOOLCHAIN_DIR/bin/visual-python"
 mkdir -p "$LOG_DIR"
 
 temp_base="$(CDPATH= cd -- "${TMPDIR:-/tmp}" && pwd -P)"
-TEMP_PROJECT="$(mktemp -d "$temp_base/manim-video-external.XXXXXX")"
+TEMP_PROJECT="$(mktemp -d "$temp_base/visual-explainer-external.XXXXXX")"
 TEMP_PROJECT="$(CDPATH= cd -- "$TEMP_PROJECT" && pwd -P)"
 
 cleanup() {

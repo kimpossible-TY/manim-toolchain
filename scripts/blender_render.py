@@ -15,8 +15,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 import runpy
 import sys
+import time
 from typing import Any
 
 import bpy
@@ -261,9 +263,13 @@ def render(scene: Any, args: argparse.Namespace, report: dict[str, object]) -> N
     scene.render.filepath = str(output)
     if args.frame_start is not None:
         bpy.ops.render.render(animation=True)
-        rendered = sorted(output.parent.glob(f"{output.name}*.png"))
+        expected_frames = [
+            output.parent / f"{output.name}{frame:04d}.png"
+            for frame in range(args.frame_start, args.frame_end + 1)
+        ]
+        rendered = [p for p in expected_frames if p.is_file() and p.stat().st_size > 0]
         expected_count = args.frame_end - args.frame_start + 1
-        if len(rendered) != expected_count or any(path.stat().st_size == 0 for path in rendered):
+        if len(rendered) != expected_count:
             raise RuntimeError(
                 f"Expected {expected_count} non-empty PNG frames at {output}; found {len(rendered)}"
             )
@@ -275,6 +281,43 @@ def render(scene: Any, args: argparse.Namespace, report: dict[str, object]) -> N
         report["frames"] = [output.name]
     report["render_executed"] = True
     report["output_exists"] = True
+
+
+def install_cycles_progress_handler(scene: Any) -> Any:
+    """Emit throttled sample progress supported by Blender's render_stats hook."""
+
+    sample_pattern = re.compile(r"Sample\s+(\d+)/(\d+)")
+    state = {"frame": None, "sample": -1, "last_emit": 0.0}
+
+    def on_stats(stats: str) -> None:
+        match = sample_pattern.search(str(stats))
+        if match is None:
+            return
+        sample = int(match.group(1))
+        total = int(match.group(2))
+        frame = int(scene.frame_current)
+        now = time.monotonic()
+        step = max(total // 20, 1)
+        frame_changed = frame != state["frame"]
+        sample_changed = sample - int(state["sample"]) >= step
+        terminal = sample in {0, total}
+        heartbeat = now - float(state["last_emit"]) >= 2.0
+        if frame_changed or sample_changed or terminal or heartbeat:
+            print(
+                f"BLENDER_CYCLES_PROGRESS frame={frame} sample={sample}/{total}",
+                flush=True,
+            )
+            state.update({"frame": frame, "sample": sample, "last_emit": now})
+
+    bpy.app.handlers.render_stats.append(on_stats)
+    return on_stats
+
+
+def remove_cycles_progress_handler(handler: Any) -> None:
+    try:
+        bpy.app.handlers.render_stats.remove(handler)
+    except ValueError:
+        pass
 
 
 def write_report(report: dict[str, object], report_path: Path | None) -> None:
@@ -305,8 +348,15 @@ def main() -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         bpy.ops.wm.save_as_mainfile(filepath=str(target))
         report["saved_blend"] = str(args.save_blend)
+    progress_handler = None
     if args.mode != "validate":
-        render(scene, args, report)
+        if args.engine == "cycles":
+            progress_handler = install_cycles_progress_handler(scene)
+        try:
+            render(scene, args, report)
+        finally:
+            if progress_handler is not None:
+                remove_cycles_progress_handler(progress_handler)
     write_report(report, args.report)
     if report["render_executed"]:
         print(f"BLENDER_RENDER_ENGINE={report['engine']}")
