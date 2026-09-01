@@ -15,3 +15,7 @@ media/*
 
 .DS_Store
 graphify-out/
+
+# Runpod jobs contain presigned URLs and must never be committed.
+*.runpod.json
+runpod_jobs*.json

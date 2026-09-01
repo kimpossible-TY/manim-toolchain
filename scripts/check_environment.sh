@@ -10,8 +10,8 @@ readonly GLOBAL_VISUAL_WRAPPER="/Users/taeyoung/.local/bin/visual-python"
 readonly GLOBAL_BLENDER_WRAPPER="/Users/taeyoung/.local/bin/visual-blender"
 readonly GLOBAL_BLENDER_PREVIEW_WRAPPER="/Users/taeyoung/.local/bin/visual-blender-preview"
 readonly GLOBAL_BLENDER_RENDER_WRAPPER="/Users/taeyoung/.local/bin/visual-blender-render"
-readonly GLOBAL_COLAB_PREPARE_WRAPPER="/Users/taeyoung/.local/bin/visual-colab-prepare"
-readonly GLOBAL_COLAB_STOP_WRAPPER="/Users/taeyoung/.local/bin/visual-colab-stop"
+readonly GLOBAL_RUNPOD_WRAPPER="/Users/taeyoung/.local/bin/visual-runpod"
+readonly GLOBAL_RUNPOD_PREPARE_WRAPPER="/Users/taeyoung/.local/bin/visual-runpod-prepare"
 readonly USER_CONFIG="/Users/taeyoung/.config/manim/manim.cfg"
 
 unset VIRTUAL_ENV
@@ -96,12 +96,8 @@ else
     printf 'Blender: missing (optional; local Blender previews and Cycles checks are unavailable)\n'
 fi
 
-if COLAB_BIN="$(command -v colab 2>/dev/null)"; then
-    printf 'Colab CLI: %s\n' "$COLAB_BIN"
-    "$COLAB_BIN" version | sed -n '1p'
-else
-    printf 'Colab CLI: missing (optional; only local bundle preparation is available)\n'
-fi
+printf 'Runpod CLI: repository wrappers available (%s, %s)\n' \
+    "$TOOLCHAIN_DIR/bin/visual-runpod" "$TOOLCHAIN_DIR/bin/visual-runpod-prepare"
 
 run_uv python - <<'PY'
 from importlib import metadata
@@ -257,11 +253,15 @@ check_wrapper "$GLOBAL_VISUAL_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-python"
 check_wrapper "$GLOBAL_BLENDER_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-blender"
 check_wrapper "$GLOBAL_BLENDER_PREVIEW_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-blender-preview"
 check_wrapper "$GLOBAL_BLENDER_RENDER_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-blender-render"
-check_wrapper "$GLOBAL_COLAB_PREPARE_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-colab-prepare"
-if [[ -e "$GLOBAL_COLAB_STOP_WRAPPER" || -L "$GLOBAL_COLAB_STOP_WRAPPER" ]]; then
-    check_wrapper "$GLOBAL_COLAB_STOP_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-colab-stop"
+if [[ -e "$GLOBAL_RUNPOD_WRAPPER" || -L "$GLOBAL_RUNPOD_WRAPPER" ]]; then
+    check_wrapper "$GLOBAL_RUNPOD_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-runpod"
 else
-    printf 'Global Colab stop wrapper: optional (use %s/bin/visual-colab-stop)\n' "$TOOLCHAIN_DIR"
+    printf 'Global Runpod wrapper: optional (use %s/bin/visual-runpod)\n' "$TOOLCHAIN_DIR"
+fi
+if [[ -e "$GLOBAL_RUNPOD_PREPARE_WRAPPER" || -L "$GLOBAL_RUNPOD_PREPARE_WRAPPER" ]]; then
+    check_wrapper "$GLOBAL_RUNPOD_PREPARE_WRAPPER" "$TOOLCHAIN_DIR/bin/visual-runpod-prepare"
+else
+    printf 'Global Runpod prepare wrapper: optional (use %s/bin/visual-runpod-prepare)\n' "$TOOLCHAIN_DIR"
 fi
 
 if [[ "$(readlink "$USER_CONFIG")" != "$TOOLCHAIN_DIR/manim.cfg" ]]; then

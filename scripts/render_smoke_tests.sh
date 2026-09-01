@@ -7,7 +7,7 @@ readonly VISUAL_PYTHON="$TOOLCHAIN_DIR/bin/visual-python"
 readonly BLENDER_PREVIEW="$TOOLCHAIN_DIR/bin/visual-blender-preview"
 readonly BLENDER_RENDER="$TOOLCHAIN_DIR/bin/visual-blender-render"
 readonly BLENDER="$TOOLCHAIN_DIR/bin/visual-blender"
-readonly COLAB_PREPARE="$TOOLCHAIN_DIR/bin/visual-colab-prepare"
+readonly RUNPOD_PREPARE="$TOOLCHAIN_DIR/bin/visual-runpod-prepare"
 
 cd "$TOOLCHAIN_DIR"
 
@@ -177,12 +177,11 @@ render_blender() {
     "$BLENDER" --background --python scripts/blender_render.py -- \
         --mode validate --scene-script scenes/blender_smoke_scene.py \
         --save-blend "$source_blend"
-    "$COLAB_PREPARE" \
+    "$RUNPOD_PREPARE" \
         --scene "$source_blend" --scene-script scenes/blender_smoke_scene.py \
         --output "$job_dir" --width 96 --height 54 --fps 12 \
-        --frame-start 1 --frame-end 2 --samples 2 --device cpu
-    "$VISUAL_PYTHON" scripts/verify_render_job.py \
-        --job "$job_dir" --frame-start 1 --frame-end 2
+        --frame-start 1 --frame-end 2 --chunk-size 2 --samples 2 --device auto
+    "$VISUAL_PYTHON" scripts/verify_runpod_render_job.py --job "$job_dir"
 }
 
 case "$MODE" in

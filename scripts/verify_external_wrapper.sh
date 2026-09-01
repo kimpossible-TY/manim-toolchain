@@ -59,6 +59,7 @@ grep -F "EXTERNAL_SCENE_CWD=$TEMP_PROJECT" "$LOG_DIR/external-wrapper-smoke.log"
 grep -F "EXTERNAL_SCENE_PYTHON=$TOOLCHAIN_DIR/.venv/bin/python" "$LOG_DIR/external-wrapper-smoke.log" >/dev/null
 grep -F 'EXTERNAL_SCENE_MANIM=0.21.0' "$LOG_DIR/external-wrapper-smoke.log" >/dev/null
 grep -F 'EXTERNAL_SCENE_TYPST=0.15.0' "$LOG_DIR/external-wrapper-smoke.log" >/dev/null
+grep -F 'EXTERNAL_SCENE_CLOUD_CREDENTIALS_ABSENT=True' "$LOG_DIR/external-wrapper-smoke.log" >/dev/null
 
 grep -F "EXTERNAL_VISUAL_CWD=$TEMP_PROJECT" "$LOG_DIR/external-visual-wrapper-smoke.log" >/dev/null
 grep -F "EXTERNAL_VISUAL_PYTHON=$TOOLCHAIN_DIR/.venv/bin/python" "$LOG_DIR/external-visual-wrapper-smoke.log" >/dev/null
@@ -98,5 +99,6 @@ ffprobe \
 printf 'PASS: both wrappers preserved the caller cwd and relative output paths.\n'
 printf 'PASS: central Manim, PyGfx, wgpu, Taichi, and narration packages were used.\n'
 printf 'PASS: visual-python did not load narration credentials.\n'
+printf 'PASS: external Manim did not load Runpod/R2 credentials.\n'
 printf 'PASS: external pyproject.toml and .venv were ignored and left unchanged.\n'
 printf 'PASS: Blender preview preserved the caller cwd and did not mutate its environment.\n'

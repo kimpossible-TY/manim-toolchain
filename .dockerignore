@@ -1,0 +1,11 @@
+.git
+.gitignore
+.venv
+.env
+.env.*
+media
+__pycache__
+*.pyc
+*.mp4
+*.png
+*.tar.gz

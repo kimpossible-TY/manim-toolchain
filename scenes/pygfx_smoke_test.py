@@ -28,8 +28,21 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def get_h264_encoder_args(bitrate: str = "4M") -> list[str]:
+    import sys
+    if sys.platform == "darwin":
+        try:
+            probe = subprocess.run(["ffmpeg", "-encoders"], capture_output=True, text=True, check=False)
+            if "h264_videotoolbox" in probe.stdout:
+                return ["-c:v", "h264_videotoolbox", "-b:v", bitrate, "-pix_fmt", "yuv420p"]
+        except Exception:
+            pass
+    return ["-c:v", "libx264", "-pix_fmt", "yuv420p"]
+
+
 def start_encoder(output: Path, width: int, height: int, fps: int) -> subprocess.Popen[bytes]:
     output.parent.mkdir(parents=True, exist_ok=True)
+    encoder_args = get_h264_encoder_args(bitrate="4M")
     command = [
         "ffmpeg",
         "-hide_banner",
@@ -47,10 +60,7 @@ def start_encoder(output: Path, width: int, height: int, fps: int) -> subprocess
         "-i",
         "pipe:0",
         "-an",
-        "-c:v",
-        "libx264",
-        "-pix_fmt",
-        "yuv420p",
+        *encoder_args,
         "-movflags",
         "+faststart",
         str(output),

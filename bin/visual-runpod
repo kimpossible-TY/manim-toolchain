@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly TOOLCHAIN_DIR="/Users/taeyoung/Developer/manim-toolchain"
+
+if [[ ! -f "$TOOLCHAIN_DIR/pyproject.toml" || ! -f "$TOOLCHAIN_DIR/uv.lock" ]]; then
+    printf 'Central visualization toolchain is incomplete: %s\n' "$TOOLCHAIN_DIR" >&2
+    exit 1
+fi
+
+# This is the one wrapper allowed to receive Runpod/R2 credentials. It keeps
+# the caller's cwd while ignoring a video project's uv environment and dotenv.
+unset VIRTUAL_ENV
+unset UV_PROJECT UV_PROJECT_ENVIRONMENT
+unset UV_WORKING_DIR UV_WORKING_DIRECTORY
+unset UV_ENV_FILE UV_NO_ENV_FILE UV_PYTHON
+
+UV_BIN="$(command -v uv)"
+ENV_ARGS=(--no-env-file)
+if [[ -f "$TOOLCHAIN_DIR/.env" ]]; then
+    credential_mode="$(stat -f '%Lp' "$TOOLCHAIN_DIR/.env")"
+    case "$credential_mode" in
+        400|600) ;;
+        *)
+            printf 'Refusing to load %s with permissions %s; run chmod 600 on it.\n' \
+                "$TOOLCHAIN_DIR/.env" "$credential_mode" >&2
+            exit 1
+            ;;
+    esac
+    ENV_ARGS=(--env-file "$TOOLCHAIN_DIR/.env")
+fi
+
+exec "$UV_BIN" run \
+    --project "$TOOLCHAIN_DIR" \
+    --frozen \
+    --no-managed-python \
+    "${ENV_ARGS[@]}" \
+    -- python "$TOOLCHAIN_DIR/scripts/runpod_client.py" "$@"

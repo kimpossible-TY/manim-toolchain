@@ -1,10 +1,10 @@
-# Blender previews, Cycles, and portable scenes
+# Blender previews, Runpod Cycles, and portable scenes
 
 Read this when a request genuinely needs Blender-level materials, lighting,
 assets, transparency, cinematic camera work, rigging, volumetrics, or geometry
 work.
 
-## Workflow: Local EEVEE preview -> Colab CLI Cycles render -> Local FFmpeg
+## Workflow: Local EEVEE preview -> Runpod Cycles chunks -> Local FFmpeg
 
 1. **Local EEVEE preview**:
    Validate composition, materials, camera, and timing locally at configurable
@@ -25,19 +25,23 @@ work.
    bundle validation. Pack small assets directly; put large licensed assets in
    the explicit `assets/` directory.
 
-3. **Colab CLI execution (default for all Blender production renders)**:
-   Package the portable bundle and execute remote rendering on the reusable
-   `visual-render` GPU worker session with multi-worker parallel chunking:
+3. **Runpod Serverless execution (default for all Blender production renders)**:
+   Package the portable bundle, submit one Runpod job per frame chunk, and let
+   the endpoint scale workers horizontally:
 
    ```sh
-   visual-colab-prepare \
+   visual-runpod-prepare \
      --scene scene.blend --scene-script scenes/hero.py --asset-dir assets \
      --output render-job --width 1920 --height 1080 --fps 30 \
-     --frame-start 1 --frame-end 240 --workers 4 --samples 128 --device auto
+     --frame-start 1 --frame-end 240 --chunk-size 60 --samples 128 --device auto
 
-   # Execute on Colab CLI (reuses existing visual-render worker instantly):
-   ./render-job/colab_commands.sh
+   # Set RUNPOD_* and R2_* variables first; --r2 creates all signed URLs.
+   visual-runpod submit --bundle render-job --r2
+   visual-runpod wait --jobs-file render-job.runpod.json --download
    ```
+
+   Manual signed URL options remain available for another S3-compatible
+   provider; see [`references/runpod.md`](runpod.md).
 
 4. **Local frame verification & FFmpeg composition**:
    The downloaded image sequence and render report are verified locally:
@@ -48,9 +52,14 @@ work.
      --width 1920 --height 1080
    ```
 
-   The verifier rejects missing, zero-byte, corrupt, and inconsistent-dimension
-   PNG frames. Combine the verified PNG sequence with other story beats using
-   local FFmpeg.
+   The client and worker reject missing, zero-byte, corrupt, and
+   inconsistent-dimension PNG frames. Combine the verified PNG sequence with
+   other story beats using local FFmpeg.
+
+The worker image is built from `runpod/Dockerfile`. It contains Blender and the
+small helper scripts, so a serverless invocation does not install Blender at
+request time. Keep the invariant `one worker request = one GPU = one Blender
+process`; chunk parallelism belongs to the endpoint queue.
 
 ## Local multi-worker & diagnostic rendering
 

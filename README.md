@@ -14,7 +14,7 @@
 [![FFmpeg 9.0.1](https://img.shields.io/badge/FFmpeg-9.0.1-007808?logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
 [![SoX 14.4.2](https://img.shields.io/badge/SoX-14.4.2-6B4FBB)](https://sourceforge.net/projects/sox/)
 [![uv 0.12.7](https://img.shields.io/badge/uv-0.12.7-6B4FBB)](https://docs.astral.sh/uv/)
-[![Colab CLI 0.6.0](https://img.shields.io/badge/Colab%20CLI-0.6.0-F9AB00?logo=googlecolab&logoColor=white)](https://github.com/googlecolab/google-colab-cli)
+[![Runpod Serverless](https://img.shields.io/badge/Runpod-Serverless-6B5CFF)](https://docs.runpod.io/serverless/overview)
 
 This repository is a reusable, command-line environment for explaining ideas through visual stories: mathematical, scientific, technical, medical, product, process, or conceptual. It supports animation, scientific 3D, numerical simulation, selective high-fidelity Blender shots, narration, typesetting, and final FFmpeg composition. Math is a strong use case, not a boundary; video is one output format, not the only purpose. Individual projects keep only their scene code, assets, local configuration, and outputs.
 
@@ -27,7 +27,11 @@ The locked top-level stack is:
 - Taichi 1.7.4
 - system uv, Typst, FFmpeg/FFprobe, SoX, and native Blender from Homebrew
 
-The project intentionally has no `bpy` dependency, GUI editor workflow, web frontend, notebook runtime, CFD framework, Docker layer, second Python environment manager, or TeX distribution. Blender remains a native application and its scripts use Blender's embedded Python.
+The local project intentionally has no `bpy` dependency, GUI editor workflow,
+web frontend, notebook runtime, CFD framework, or second Python environment
+manager. The separate `runpod/Dockerfile` is only for the remote Blender worker;
+local Blender remains a native application and its scripts use Blender's
+embedded Python.
 
 ## System and Python ownership
 
@@ -39,7 +43,7 @@ Homebrew owns system-level executables only:
 - `ffmpeg` and its `ffprobe` executable
 - `sox`
 - Blender, normally as a native macOS application or Homebrew cask
-- the optional `google-colab-cli`, installed separately using its current official method
+- the Runpod Serverless API, accessed by the dependency-free local submission CLI
 
 Before installing or changing a formula, inspect `brew config`, `brew doctor`, `brew list --versions <formula>`, and the resolved executable path. Do not reinstall a working formula merely to refresh it.
 
@@ -76,15 +80,15 @@ Manim remains the default for clear explanation, notation, vector diagrams, grap
 ~/.local/bin/visual-blender -> ~/Developer/manim-toolchain/bin/visual-blender
 ~/.local/bin/visual-blender-preview -> ~/Developer/manim-toolchain/bin/visual-blender-preview
 ~/.local/bin/visual-blender-render -> ~/Developer/manim-toolchain/bin/visual-blender-render
-~/.local/bin/visual-colab-prepare -> ~/Developer/manim-toolchain/bin/visual-colab-prepare
-~/.local/bin/visual-colab-stop (optional) -> ~/Developer/manim-toolchain/bin/visual-colab-stop
+~/.local/bin/visual-runpod -> ~/Developer/manim-toolchain/bin/visual-runpod
+~/.local/bin/visual-runpod-prepare -> ~/Developer/manim-toolchain/bin/visual-runpod-prepare
 ```
 
 `manim-video` runs the central Manim CLI and may load Gemini settings only from this repository's protected `.env`. `visual-python` runs ordinary Python with the central PyGfx/Taichi stack and always uses `--no-env-file`; it removes narration credential variables from its child process.
 
 Both wrappers deliberately keep the caller's working directory. They ignore caller uv-project selection, `VIRTUAL_ENV`, `pyproject.toml`, and `.venv`, so relative assets and outputs remain in the video repository while its dependencies remain untouched. They do not use `uv tool install` and do not `cd` into this repository.
 
-`visual-blender` is a transparent call to the installed Blender executable. The preview/render helpers run Blender background mode with Blender's own Python; they never create or alter a caller Python environment. `visual-colab-prepare` only creates a local bundle and explicit commands—it cannot authenticate, upload, allocate a runtime, or begin remote work. `visual-colab-stop` is the explicit shutdown helper for the reusable Colab worker.
+`visual-blender` is a transparent call to the installed Blender executable. The preview/render helpers run Blender background mode with Blender's own Python; they never create or alter a caller Python environment. `visual-runpod-prepare` only creates a local bundle. `visual-runpod` submits chunks using either its built-in Cloudflare R2 presigning mode or caller-supplied signed object-storage URLs; it never embeds credentials in a bundle.
 
 The equivalent generic invocation is:
 
@@ -179,11 +183,11 @@ visual-python /Users/taeyoung/Developer/manim-toolchain/scenes/taichi_pygfx_smok
   --arch cpu --numerical-only
 ```
 
-## Blender escalation and Colab CLI rendering
+## Blender escalation and Runpod Serverless rendering
 
 Blender is a conditional high-fidelity renderer, not the default 3D engine. Use it for a realistic translucent bladder, a product/anatomical model, complex shadows, depth of field, volumetrics, rigging, imported assets, or another shot where PyGfx cannot communicate the result efficiently. A rotating cube, triangulated sphere, or wave surface normally belongs in Manim, PyGfx, or Taichi + PyGfx.
 
-All Blender production renders and Cycles image-sequence batches are executed remotely via **Colab CLI**. Local Blender is used for scene authoring, rapid composition/framing validation with lightweight EEVEE previews, and asset portability checks.
+All Blender production renders and Cycles image-sequence batches are executed remotely via **Runpod Serverless**. Local Blender is used for scene authoring and rapid composition/framing validation with lightweight EEVEE previews. Asset portability is checked in the worker by default, so a local Blender validation pass is optional.
 
 Author reproducible scenes with regular Blender Python. Start with a local EEVEE background preview; the defaults are configurable through `VISUAL_BLENDER_PREVIEW_WIDTH`, `VISUAL_BLENDER_PREVIEW_HEIGHT`, `VISUAL_BLENDER_PREVIEW_SAMPLES`, and `VISUAL_BLENDER_PREVIEW_SCALE` and do not save over the source `.blend`:
 
@@ -192,17 +196,27 @@ visual-blender-preview --scene-script scenes/anatomy.py \
   --output media/previews/anatomy.png --width 1280 --height 720 --frame 1
 ```
 
-For production rendering, prepare a portable bundle and execute via Colab CLI:
+For production rendering, prepare a portable bundle and submit independent frame chunks:
 
 ```sh
-visual-colab-prepare \
+visual-runpod-prepare \
   --scene scene.blend --scene-script scenes/anatomy.py --asset-dir assets \
   --output render-job --width 1920 --height 1080 --fps 30 \
-  --frame-start 1 --frame-end 240 --samples 128 --device auto
+  --frame-start 1 --frame-end 240 --chunk-size 60 --samples 128 --device auto
 
-# Run on the reusable visual-render GPU worker:
-./render-job/colab_commands.sh
+# Put RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID, and R2_* in the protected central .env.
+# Only visual-runpod loads these values; they are never bundled.
+visual-runpod submit --bundle render-job --r2
+
+visual-runpod wait --jobs-file render-job.runpod.json --download
+visual-runpod retry --jobs-file render-job.runpod.json
+visual-runpod cleanup --jobs-file render-job.runpod.json --confirm
 ```
+
+The `--r2` mode uploads the bundle and generates per-chunk presigned GET/PUT
+URLs automatically. Configure `R2_ACCOUNT_ID`, `R2_BUCKET`,
+`R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` first. The manual signed-URL
+options remain available for S3-compatible providers other than R2.
 
 Downloaded frames and reports are verified locally, then composed with FFmpeg:
 
@@ -214,21 +228,37 @@ visual-python /Users/taeyoung/Developer/manim-toolchain/scripts/verify_frame_seq
 
 For local CPU fallback diagnostics or transparent CLI access, `visual-blender` and `visual-blender-render` remain available.
 
-## Colab render and compute offload
+## Runpod Serverless render and compute offload
 
-Manim, ordinary PyGfx, EEVEE previews, and final FFmpeg composition stay local by default. **All Blender Cycles renders and heavy simulation compute are routed to Colab CLI.**
+Manim, ordinary PyGfx, Taichi simulations, EEVEE previews, and final FFmpeg composition stay local by default. **Blender Cycles production rendering is routed to Runpod Serverless.**
 
-`visual-colab-prepare` validates missing and unresolved absolute asset paths, copies only explicitly named assets, and creates `render_manifest.json`, `bootstrap.sh`, and authorization-marked `colab_commands.sh`. It does not perform a remote action. Starting a session, logging in, uploading assets, or consuming quota/credits requires explicit user authorization in that request. Never include `.env` files, credentials, browser profiles, unrelated repository files, private media, or datasets in a bundle.
+`visual-runpod-prepare` copies only the scene, optional scene script, explicitly named assets, and small Blender helpers. It creates a `runpod-serverless` manifest and an empty output directory without contacting Runpod. `visual-runpod` archives that bundle, splits the frame range, submits one job per chunk, polls the endpoint, downloads signed output archives, and merges/verifies the PNG sequence. Never include `.env` files, credentials, browser profiles, unrelated repository files, private media, or datasets in a bundle.
 
-The generated Colab commands use the separately installed official `google-colab-cli`; do not add it to this project. The normal reusable worker is `visual-render` with a default T4. Each job checks `colab sessions`, `colab status`, and a read-only `/content` probe before reusing it; an absent worker requires the explicit `--allow-new-session` flag (or `COLAB_ALLOW_NEW_SESSION=1`) before `colab new` can allocate one. Thanks to pre-built portable tarball installation and persistent session reuse, subsequent jobs reuse the running worker instantly. When remote work is finished, run `visual-colab-stop` (or `./bin/visual-colab-stop`); `--stop-after-job` remains available for explicit disposable mode. Download PNG frames, verify their count/corruption/dimensions and completed Cycles report locally, then encode with local FFmpeg. The requested GPU flag is never treated as proof of actual GPU rendering.
+The worker image is built from `runpod/Dockerfile` with Blender pinned and deployed as a Runpod Serverless endpoint. Keep one worker request bound to one GPU and one Blender process; horizontal parallelism comes from the endpoint queue and chunk jobs. The worker downloads the input archive, verifies its SHA-256, validates portable assets on the first chunk, renders Cycles, verifies the chunk, uploads an archive, and returns its digest. A requested GPU is accepted only when the completed Blender report says `render_device=GPU`.
+
+Build and push the image from an amd64-capable Docker host, then select that image in a Runpod endpoint:
 
 ```sh
-# Reuse visual-render when it exists; authorize first allocation explicitly if absent.
-./render-job/colab_commands.sh
-./render-job/colab_commands.sh --allow-new-session
+docker build --platform linux/amd64 \
+  -f runpod/Dockerfile \
+  --build-arg BLENDER_VERSION=5.2.1 \
+  --build-arg BLENDER_SHA256=a31f524fa99a527d3d52b7f5aaa68c34e1a19d5a1c9473f79c5cc610fd5b10e9 \
+  -t ghcr.io/ORG/manim-blender-worker:5.2.1 .
+docker push ghcr.io/ORG/manim-blender-worker:5.2.1
+```
 
-# After all remote jobs are downloaded and verified:
-./bin/visual-colab-stop
+Use a queue-based endpoint with a small active-worker floor and a max-worker limit appropriate to the account's GPU budget. Put `RUNPOD_API_KEY`, `RUNPOD_ENDPOINT_ID`, and R2 credentials in the protected central `.env`; only `visual-runpod` loads them. Signed input/output URLs belong in the `0600` jobs file and must not be committed.
+
+```sh
+# Inspect an already-submitted batch:
+visual-runpod status --jobs-file render-job.runpod.json
+
+# Download only after every chunk is complete:
+visual-runpod download --jobs-file render-job.runpod.json
+
+# Retry failed R2 chunks or clean this batch after verification:
+visual-runpod retry --jobs-file render-job.runpod.json
+visual-runpod cleanup --jobs-file render-job.runpod.json --confirm
 ```
 
 ## Mixed explanation scenes and composition
@@ -401,7 +431,7 @@ The tests prove more than imports: the narration tests mock Gemini while exercis
 - Taichi emits an upstream `SyntaxWarning` from `taichi.tools.image` on its first Python 3.13 import; this does not affect tested kernels or PyGfx transfer.
 - Renderer and simulation backends are printed by the smoke tests so runtime behavior is observable.
 - Blender 5.2.1 LTS is installed as a native Apple Silicon application. Local EEVEE previews and Cycles CPU are tested; GPU success is reported only if an actual Cycles GPU render completes.
-- `google-colab-cli` 0.6.0 is installed separately as an optional uv tool. It is not contacted by local validation.
+- Runpod Serverless rendering is intentionally not contacted by local validation. Remote API calls happen only through `visual-runpod` with explicit credentials.
 
 ## Maintain the toolchain
 
@@ -426,4 +456,6 @@ The tracked Codex skill lives at `skills/manim-toolchain`; its installed path is
 - [Manim Voiceover](https://github.com/ManimCommunity/manim-voiceover)
 - [uv `run --project`](https://docs.astral.sh/uv/reference/cli/#uv-run)
 - [Blender command line](https://docs.blender.org/manual/en/latest/advanced/command_line/arguments.html)
-- [Official google-colab-cli](https://github.com/googlecolab/google-colab-cli)
+- [Runpod Serverless overview](https://docs.runpod.io/serverless/overview)
+- [Runpod Serverless endpoints](https://docs.runpod.io/serverless/endpoints/overview)
+- [Runpod Serverless worker deployment](https://docs.runpod.io/serverless/workers/deploy)

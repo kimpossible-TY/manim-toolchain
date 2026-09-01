@@ -24,7 +24,8 @@ Taichi kernels -> arrays/fields -> .to_numpy() -> PyGfx geometry -> frames
 ```
 
 Initialize portably: verify Metal on Apple Silicon when requested, provide an
-explicit CPU option, and use CUDA only after a Colab GPU is selected and tested.
+explicit CPU option, and use CUDA only after a Runpod GPU worker is selected
+and tested.
 Do not silently change precision or algorithms between backends. Record random
 seed, time step, steps per presented frame, simulation dimensions, chosen
 backend, and floating-point precision in scene configuration or output metadata.
@@ -35,6 +36,8 @@ define kernels; let annotations such as `ti.f32` evaluate normally.
 
 For a potentially remote simulation, run a reduced local simulation first,
 measure representative step/render time and memory, estimate production cost,
-then include Colab provisioning, dependency setup, transfer, and download time
-in the decision. Prefer returning `simulation.npz` to the Mac and rendering it
-with local PyGfx unless remote headless PyGfx has been explicitly verified.
+then include Runpod image cold-start, dependency setup, transfer, and download
+time in the decision. Prefer returning `simulation.npz` to the Mac and
+rendering it with local PyGfx unless remote headless PyGfx has been explicitly
+verified. The Blender Runpod worker in this repository is not a generic PyGfx
+worker; create a separate image when remote simulation is truly justified.

@@ -4,6 +4,9 @@ set -euo pipefail
 # Direct, transparent access to the installed Blender executable.  This wrapper
 # deliberately does not activate the central uv environment or load dotenv
 # files; Blender scripts run with Blender's bundled Python.
+unset RUNPOD_API_KEY RUNPOD_ENDPOINT_ID RUNPOD_API_BASE_URL
+unset R2_ACCOUNT_ID R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY
+unset R2_ENDPOINT_URL R2_PREFIX R2_URL_EXPIRY_SECONDS
 if [[ -n "${BLENDER_BIN:-}" ]]; then
     blender_bin="$BLENDER_BIN"
 elif command -v blender >/dev/null 2>&1; then

@@ -19,6 +19,11 @@ unset UV_ENV_FILE UV_NO_ENV_FILE UV_PYTHON
 # surface exclusive to manim-video and its central dotenv policy.
 unset GEMINI_API_KEY GOOGLE_API_KEY GEMINI_AUTH_MODE
 unset GOOGLE_CLOUD_PROJECT GOOGLE_CLOUD_LOCATION GOOGLE_APPLICATION_CREDENTIALS
+# Cloud storage and control-plane credentials belong only to visual-runpod.
+# In particular, do not leak them into an external project's Python process.
+unset RUNPOD_API_KEY RUNPOD_ENDPOINT_ID RUNPOD_API_BASE_URL
+unset R2_ACCOUNT_ID R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY
+unset R2_ENDPOINT_URL R2_PREFIX R2_URL_EXPIRY_SECONDS
 
 UV_BIN="$(command -v uv)"
 

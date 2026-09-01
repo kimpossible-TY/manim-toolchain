@@ -28,9 +28,11 @@ honor an explicit override unless a concrete constraint makes it impossible.
 - Homebrew/system tools own Blender, FFmpeg/FFprobe, Typst CLI, SoX, uv, and
   compatible Python. Blender scripts run under Blender's embedded Python;
   never add `bpy` to this uv project.
-- Keep credentials solely in the protected central `.env`. `visual-python`
-  removes narration credentials. Never put keys, ADC paths, browser profiles,
-  or secrets into a scene, `.blend`, manifest, render bundle, or log.
+- Keep credentials solely in the protected central `.env`. `visual-python`,
+  `manim-video`, and local Blender wrappers remove Runpod/R2 credentials;
+  `visual-runpod` is the only wrapper allowed to load them. Never put keys, ADC
+  paths, browser profiles, or secrets into a scene, `.blend`, manifest, render
+  bundle, or log.
 - Prefer `from manim import Typst, MathTypst`; do not add a LaTeX distribution.
 
 ## Route each segment
@@ -43,7 +45,7 @@ Plan the intuition and visual transformation before choosing technology.
 | Meshes, surfaces, point clouds, spatial fields, camera perspective, or lightweight scientific 3D | PyGfx |
 | Analytically prescribed motion with modest state | NumPy + PyGfx |
 | Many evolving particles/grids/fields, PDEs, or compute-heavy deformation | Taichi + PyGfx |
-| Materials, lighting, anatomy, imported assets, volumetrics, rigging, or a cinematic hero shot that materially benefits | Blender (Colab CLI) |
+| Materials, lighting, anatomy, imported assets, volumetrics, rigging, or a cinematic hero shot that materially benefits | Blender (Runpod Serverless) |
 | Distinct explanatory and high-fidelity/numerical beats in one story | Mixed segments + FFmpeg |
 
 Do not choose Blender because an object is three-dimensional, or Taichi because
@@ -57,9 +59,9 @@ Useful routing checks:
 - Triangulated sphere: PyGfx.
 - Twenty-thousand particles in a vortex: Taichi + PyGfx, then benchmark local
   before considering remote compute.
-- Realistic translucent bladder: Blender (rendered via Colab CLI).
+- Realistic translucent bladder: Blender (rendered via Runpod Serverless).
 - Equations, anatomical shot, and flow-rate graph: Manim + short Blender shot
-  (Colab CLI) + FFmpeg.
+  (Runpod Serverless) + FFmpeg.
 - A rotating cube: Manim or PyGfx unless realistic rendering is explicitly
   valuable.
 
@@ -74,7 +76,7 @@ Use engines for successive beats of one idea, not as disconnected demos:
 ```text
 Manim question/equation -> Manim geometric intuition
   -> PyGfx or Taichi/PyGfx numerical manifestation
-  -> optional Blender hero shot (Colab CLI) -> Manim interpretation
+  -> optional Blender hero shot (Runpod Serverless) -> Manim interpretation
 ```
 
 Set resolution, FPS, background/color language, narration cadence, and
@@ -82,12 +84,13 @@ transition frames before rendering. Use the composition reference when the
 result combines segments or separate narration:
 [`references/composition.md`](references/composition.md).
 
-## Blender renders via Colab CLI; EEVEE for local preview
+## Blender renders via Runpod Serverless; EEVEE for local preview
 
 All Blender production rendering and Cycles image-sequence workloads are executed
-remotely via **Colab CLI** (`visual-colab-prepare` → `colab_commands.sh`).
-Local Blender is used strictly for scene authoring, rapid composition/framing
-validation with lightweight EEVEE previews, and asset portability checks.
+remotely via **Runpod Serverless** (`visual-runpod-prepare` →
+`visual-runpod submit`). Local Blender is used for scene authoring and rapid
+composition/framing validation with lightweight EEVEE previews. Asset
+portability validation runs in the worker by default.
 
 Local preview workflow:
 
@@ -102,51 +105,61 @@ and `visual-blender-render` remain available locally. Read
 [`references/blender.md`](references/blender.md) for scene preparation, portable
 assets, and local preview commands.
 
-## Colab CLI for all Blender production rendering
+## Runpod Serverless for all Blender production rendering
 
-Manim, ordinary PyGfx, EEVEE previews, and final FFmpeg composition stay local
-by default. **All Blender Cycles renders and heavy simulation compute are
-routed to Colab CLI.**
+Manim, ordinary PyGfx, Taichi simulations, EEVEE previews, and final FFmpeg
+composition stay local by default. **Blender Cycles production rendering is
+routed to Runpod Serverless.**
 
 Prepare a portable Blender bundle locally:
 
 ```sh
-visual-colab-prepare \
+visual-runpod-prepare \
   --scene scene.blend --scene-script scenes/hero.py --asset-dir assets \
   --output render-job --width 1920 --height 1080 --fps 30 \
-  --frame-start 1 --frame-end 240 --samples 128 --device auto
+  --frame-start 1 --frame-end 240 --chunk-size 60 --samples 128 --device auto
 ```
 
-`visual-colab-prepare` creates a self-contained, validated bundle with portable
-asset checks, `render_manifest.json`, `bootstrap.sh`, and `colab_commands.sh`.
-Starting a session, uploading assets, or consuming GPU quota requires explicit
-user authorization in that request. Never upload credentials, `.env` files, ADC
+`visual-runpod-prepare` creates a self-contained input bundle with portable
+asset metadata, an empty output directory, and a `runpod-serverless`
+`render_manifest.json`. Local Blender validation is optional; the worker checks
+the first chunk before rendering. Never upload credentials, `.env` files, ADC
 paths, SSH keys, browser profiles, or unrelated repository data.
 
-The default reusable remote worker is named `visual-render` (requesting a T4 or
-configured GPU). Thanks to pre-built portable tarball installation and persistent
-session reuse (`reuse-before-create`):
+The worker image is built from `runpod/Dockerfile`, contains a pinned Blender
+runtime, and is deployed to a Runpod Serverless endpoint. One request maps to
+one GPU and one Blender process; horizontal parallelism comes from the endpoint
+queue rather than multiple Blender processes inside one worker:
 
 ```text
-job lifecycle:     prepare -> upload -> execute -> download -> verify
-session lifecycle: create -> reuse for zero or more jobs -> explicit stop
+job lifecycle:     prepare -> archive/upload -> submit chunks -> poll -> download -> verify
+worker lifecycle:  cold start -> render one chunk -> upload -> idle/terminate
 ```
 
-- If `visual-render` is running and reachable, subsequent jobs reuse it
-  instantly (`COLAB_SESSION_ACTION=reused`, `REMOTE_BLENDER_ACTION=reused`) with
-  zero re-installation overhead.
-- If absent, `colab_commands.sh` allocates a runtime when authorized with
-  `--allow-new-session` (or `COLAB_ALLOW_NEW_SESSION=1`).
-- Normal jobs leave the reusable session running. Use `visual-colab-stop`
-  (or `./bin/visual-colab-stop`) when all remote rendering work is finished.
+Put `RUNPOD_API_KEY` and `RUNPOD_ENDPOINT_ID`, plus the bucket-scoped
+`R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`, in
+the protected central `.env` (mode `600`). `visual-runpod` loads that file and
+can also use the standard `~/.runpod/config.toml` API-key fallback; generic
+visualization wrappers do not inherit these credentials. Then submit the chunk
+batch with automatic R2 presigning:
 
-Remote `/content` storage is ephemeral cache. Every job uses a unique remote
-directory under `/content/manim-toolchain/jobs/`, and generated PNG sequences
-and reports return to local storage. For Blender, maintain the standard flow:
+```sh
+visual-runpod submit --bundle render-job --r2
+visual-runpod wait --jobs-file render-job.runpod.json --download
+# Retry only failed R2 chunks with fresh signed URLs:
+visual-runpod retry --jobs-file render-job.runpod.json
+# After verifying and retaining the local output, delete this batch from R2:
+visual-runpod cleanup --jobs-file render-job.runpod.json --confirm
+```
+
+The client and worker use SHA-256-checked tar archives rather than embedding PNG
+data in Runpod JSON. The worker returns metadata and a signed output download
+URL; the client verifies every chunk and the merged sequence locally. For
+Blender, maintain the standard flow:
 `remote Cycles PNG sequence -> local verification -> local FFmpeg composition`.
 
-Read [`references/colab.md`](references/colab.md) for manifest structure,
-upload boundaries, session lifecycle, and verification details.
+Read [`references/runpod.md`](references/runpod.md) for the manifest, signed URL
+boundary, worker image, chunk orchestration, and verification details.
 
 ## Keep narration separate from notation
 
