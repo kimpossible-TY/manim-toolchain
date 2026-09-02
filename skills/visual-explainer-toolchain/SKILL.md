@@ -33,6 +33,24 @@ honor an explicit override unless a concrete constraint makes it impossible.
   `visual-runpod` is the only wrapper allowed to load them. Never put keys, ADC
   paths, browser profiles, or secrets into a scene, `.blend`, manifest, render
   bundle, or log.
+
+### macOS local Blender process boundary
+
+On macOS, invoke `visual-blender`, `visual-blender-preview`, and
+`visual-blender-render` with host/outside-sandbox execution permission. Blender
+5.x initializes Metal before running Python even in `--background` mode. A
+restricted runner can withhold the Metal device identity, causing Blender 5.2
+to exit during GPU backend detection before a scene script starts.
+
+This permission belongs to the parent process runner; it is not a Blender CLI
+flag and the wrapper must not attempt to elevate itself. In Codex, request the
+narrow host-execution approval for the selected central Blender wrapper before
+calling it. If approval is unavailable, do not repeatedly launch Blender or try
+`--gpu-backend opengl`; use the Runpod path when appropriate or report that the
+local preview is unavailable. The central `visual-blender` wrapper performs a
+macOS hardware-access preflight and exits with status 77 plus an actionable
+message instead of allowing the known Metal startup crash.
+
 ## Route each segment
 
 Choose technology after identifying the visual job that each segment must do.
@@ -65,13 +83,18 @@ Useful routing checks:
 
 For PyGfx and Taichi implementation details, including deterministic offscreen
 rendering, backend policy, and reproducibility fields, read
-[`references/pygfx-taichi.md`](references/pygfx-taichi.md).
+[`guides/pygfx-taichi.md`](guides/pygfx-taichi.md).
 
-## Apply subject-specific direction deliberately
+## Apply direction playbooks and realism separately
 
 Technology selection is not a story template. Decide the viewer, message,
 emotional tone, and information sequence from the subject instead of forcing a
 mathematical-explainer structure onto every topic.
+
+The `references/` directory contains subject- or format-specific direction
+playbooks. A playbook decides what to communicate and how to stage the viewer's
+experience; it may define story structure, camera and lighting direction,
+language, claims, or review gates for that kind of video.
 
 For a mathematics educational video, read
 [`references/math-educational-video.md`](references/math-educational-video.md)
@@ -85,8 +108,14 @@ claims or storyboarding. It defines patient-education direction and mandatory
 clinical, regulatory, and advertising-review gates; it is not medical or legal
 approval for a particular script.
 
+When physical or photorealistic visual fidelity is part of the deliverable,
+independently read [`realism.md`](realism.md). It defines cross-cutting asset,
+geometry, material, transformation, simulation, and verification standards. It
+does not choose the story, storyboard, camera language, or emotional lighting;
+those decisions belong to the applicable direction playbook or user brief.
+
 For any multi-segment video or independently produced narration, read
-[`references/composition.md`](references/composition.md) before rendering to
+[`guides/composition.md`](guides/composition.md) before rendering to
 settle shared technical delivery settings and transitions.
 
 ## Required Blender render-mode confirmation
@@ -144,7 +173,7 @@ the source `.blend`. For transparent CLI or batch inspection, `visual-blender`
 and `visual-blender-render` remain available locally. When using local parallel
 workers, point frame and report outputs to `/private/tmp` or another local
 scratch directory, especially when the project is inside iCloud Drive. Read
-[`references/blender.md`](references/blender.md) for scene preparation, portable
+[`guides/blender.md`](guides/blender.md) for scene preparation, portable
 assets, and local preview commands.
 
 ## Runpod Serverless for all Blender production rendering
@@ -208,7 +237,7 @@ sample fields are included when Blender emits sample statistics. Use
 `wait --stream` when a script should retain the normal wait command while
 showing the same live progress.
 
-Read [`references/runpod.md`](references/runpod.md) for the manifest, signed URL
+Read [`guides/runpod.md`](guides/runpod.md) for the manifest, signed URL
 boundary, worker image, chunk orchestration, and verification details.
 
 ## Keep narration separate from visual source

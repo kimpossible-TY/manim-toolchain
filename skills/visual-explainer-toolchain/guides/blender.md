@@ -4,6 +4,23 @@ Read this when a request genuinely needs Blender-level materials, lighting,
 assets, transparency, cinematic camera work, rigging, volumetrics, or geometry
 work.
 
+## macOS host-execution requirement
+
+Run every local `visual-blender`, `visual-blender-preview`, or
+`visual-blender-render` command with host/outside-sandbox execution permission
+on macOS. Blender 5.x initializes its Metal backend before Python, including in
+background mode. If a restricted runner hides the hardware or Metal device
+identity, Blender 5.2 can crash in device detection before the requested scene
+script is evaluated.
+
+The permission must be granted to the top-level wrapper invocation. A shell
+wrapper cannot escape its parent sandbox, and neither `--background` nor
+`--factory-startup` bypasses Metal initialization. The macOS Blender 5.2 build
+does not provide OpenGL as an alternate backend, so `--gpu-backend opengl` is
+not a workaround. `visual-blender` checks for restricted hardware access first
+and exits with status 77 and a concise instruction when host execution is
+required.
+
 ## Workflow: Local EEVEE preview -> Runpod Cycles chunks -> Local FFmpeg
 
 1. **Local EEVEE preview**:
@@ -41,7 +58,7 @@ work.
    ```
 
    Manual signed URL options remain available for another S3-compatible
-   provider; see [`references/runpod.md`](runpod.md).
+   provider; see the [Runpod guide](runpod.md).
 
 4. **Local frame verification & FFmpeg composition**:
    The downloaded image sequence and render report are verified locally:

@@ -60,11 +60,14 @@ medical image when a clear abstraction explains the same idea.
 | A complex biological process that needs spatial depth | PyGfx; use Blender only if material, lighting, or anatomy visibly improves comprehension |
 | Consultation, examination, procedure, and follow-up journey | A human-centered timeline, short clinician explanation, or neutral symbolic scenes |
 
-Keep Blender to the few internal-anatomy shots that benefit from it, usually
-about 10–15 seconds in a 60-second explainer. Default to no needle penetration,
-live procedure, gore, or distressing close-up. Use an arm silhouette, a gentle
+Use Blender for internal-anatomy shots when its form, depth, material, lighting,
+or camera movement materially improves comprehension. The amount and duration
+of Blender footage are determined by the storyboard and the visible benefit of
+each shot, not by a fixed time quota. Default to no needle penetration, live
+procedure, gore, or distressing close-up. Use an arm silhouette, a gentle
 location highlight, a simplified instrument diagram, a consultation scene, or
-post-visit observation instead. Any exception requires explicit clinical,
+post-visit observation when those communicate the idea more clearly. Any
+invasive or otherwise exceptional treatment requires explicit clinical,
 consent, privacy, and advertising review.
 
 ## Narrative templates

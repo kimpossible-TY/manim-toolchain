@@ -54,7 +54,7 @@ Manim question/equation -> Manim geometric intuition
   -> optional Blender hero shot -> Manim interpretation
 ```
 
-Use the shared [composition guide](composition.md) to choose common frame rate,
+Use the shared [composition guide](../guides/composition.md) to choose common frame rate,
 resolution, color handling, audio delivery, and transition checks before those
 segments are rendered.
 
