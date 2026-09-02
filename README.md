@@ -90,6 +90,8 @@ Both wrappers deliberately keep the caller's working directory. They ignore call
 
 `visual-blender` is a transparent call to the installed Blender executable. The preview/render helpers run Blender background mode with Blender's own Python; they never create or alter a caller Python environment. `visual-runpod-prepare` only creates a local bundle. `visual-runpod` submits chunks using either its built-in Cloudflare R2 presigning mode or caller-supplied signed object-storage URLs; it never embeds credentials in a bundle.
 
+On macOS, local Blender wrappers must be launched with host/outside-sandbox execution permission. Blender 5.x initializes Metal before Python even in background mode, and a restricted runner can hide the device identity needed by Blender's backend probe. The `visual-blender` wrapper detects that condition and exits with status 77 and an actionable message instead of allowing Blender 5.2 to crash before the scene script starts. This is a permission on the parent runner, not a Blender flag; `--background`, `--factory-startup`, and `--gpu-backend opengl` do not solve it.
+
 The equivalent generic invocation is:
 
 ```sh

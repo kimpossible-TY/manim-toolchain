@@ -18,4 +18,20 @@ else
     exit 127
 fi
 
+# Blender 5.x on macOS initializes the Metal display backend before it runs a
+# Python expression or script, including in background mode.  Restricted
+# process sandboxes can hide the hardware identity that Metal exposes.  The
+# Blender 5.2 release build then dereferences the missing device name while
+# checking GPU support and exits with SIGSEGV.  A child wrapper cannot grant
+# itself host access, so fail before Blender starts and tell the caller to
+# relaunch this wrapper outside the sandbox.
+if [[ "$(uname -s)" == "Darwin" ]] && \
+   ! /usr/sbin/sysctl -n hw.cpufamily >/dev/null 2>&1; then
+    printf '%s\n' \
+        'visual-blender: macOS hardware access is restricted in this process.' \
+        'Blender 5.x may crash during Metal device detection before Python starts.' \
+        'Run the visual-blender wrapper with host/outside-sandbox execution permission.' >&2
+    exit 77
+fi
+
 exec "$blender_bin" "$@"

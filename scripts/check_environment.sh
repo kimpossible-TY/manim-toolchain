@@ -284,5 +284,6 @@ if [[ "$latex_found" -eq 0 ]]; then
 fi
 
 if [[ -n "$BLENDER_BIN" ]]; then
-    "$BLENDER_BIN" --background --python "$TOOLCHAIN_DIR/scripts/blender_diagnostics.py"
+    "$TOOLCHAIN_DIR/bin/visual-blender" \
+        --background --python "$TOOLCHAIN_DIR/scripts/blender_diagnostics.py"
 fi
