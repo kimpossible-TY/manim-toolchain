@@ -61,11 +61,43 @@ visual-runpod-prepare --scene scene.blend --output render-job \
   --chunk-size 24 --samples 32 --device auto --validate-source
 ```
 
+`--asset-dir` copies directory contents, but it does not infer files imported
+by a scene wrapper. If `scene.py` loads another Python file (for example with
+`runpy` or `exec`), name that dependency explicitly with `--asset-file` and
+make the wrapper resolve it from the bundle's `assets/` directory:
+
+```sh
+visual-runpod-prepare \
+  --scene scene.blend --scene-script scenes/runpod_B03.py \
+  --asset-dir assets --asset-file scenes/gardasil9_blender.py \
+  --output render-job ...
+```
+
+Run `verify_runpod_render_job.py` before submission; missing wrapper
+dependencies should fail locally rather than during worker asset validation.
+
 The default is `--require-gpu`: a completed worker report must say
 `render_device=GPU`. Use `--no-require-gpu` only for an intentional CPU
 diagnostic. Local source validation is opt-in because final portability
 validation happens in the worker; it is also useful when a source `.blend`
 contains an absolute or missing asset path.
+
+## GPU backend compatibility gate
+
+Device enumeration is not sufficient evidence that Cycles can render on a
+particular worker. Before sending a multi-chunk production batch to a new or
+heterogeneous endpoint, submit a one-frame Cycles probe and retain its report
+with the selected `compute_backend` and GPU model. For `auto` or `gpu`, the
+worker retries a recognized `OPTIX_ERROR_INTERNAL_COMPILER_ERROR` or
+unimplemented PTX intrinsic once with CUDA in a fresh Blender process; the
+report records that fallback. An explicit `--device optix` remains strict. Do
+not scale a batch until the fallback or an explicit `--device cuda` probe passes,
+or route the batch to a known-compatible pinned GPU pool.
+
+Treat an API status of `COMPLETED` as render success only when the worker result
+also supplies a valid output archive digest. A completed status without a result
+can be an eventual-consistency state or a subsequently corrected failure, and
+must remain pending or fail explicitly rather than trigger download/composition.
 
 The bundle contains `scene.blend`, an optional `scene.py`, explicitly selected
 assets, the Blender runner, and the frame verifier. It does not include the

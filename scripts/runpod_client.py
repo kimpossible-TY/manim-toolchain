@@ -402,6 +402,49 @@ def _apply_job_output(record: dict[str, object], output: object) -> None:
                 record["output_download_url"] = item["output_download_url"]
 
 
+def _has_valid_result(record: dict[str, object]) -> bool:
+    """Return whether a completed record has an integrity-verifiable result.
+
+    The output URL is known at submission time, so its presence alone cannot
+    prove that a worker uploaded an archive.  A worker result must include the
+    archive digest returned after the upload; keep accepting legacy result
+    objects that omit ``type`` as long as that digest is well formed.
+    """
+
+    result = record.get("result")
+    if not isinstance(result, dict):
+        return False
+    result_type = result.get("type")
+    if result_type not in (None, "result"):
+        return False
+    digest = result.get("archive_sha256")
+    return isinstance(digest, str) and re.fullmatch(r"[0-9a-fA-F]{64}", digest) is not None
+
+
+def _is_completed_record(record: dict[str, object]) -> bool:
+    """Return whether a record is terminally successful and downloadable."""
+
+    return record.get("status") == "COMPLETED" and _has_valid_result(record)
+
+
+def _store_status_response(record: dict[str, object], response: dict[str, object]) -> str:
+    """Persist an API response without treating a missing worker result as success."""
+
+    _apply_job_output(record, response.get("output"))
+    reported_status = str(response.get("status", "UNKNOWN"))
+    record["last_status"] = response
+    if reported_status == "COMPLETED" and not _has_valid_result(record):
+        # Runpod can briefly report COMPLETED before a result event is exposed;
+        # it can also later correct that status to FAILED.  Keep polling instead
+        # of persisting an irreversible successful terminal state.
+        record["status"] = "RESULT_PENDING"
+        record["completion_error"] = "Runpod reported COMPLETED without a valid worker result"
+    else:
+        record["status"] = reported_status
+        record.pop("completion_error", None)
+    return str(record["status"])
+
+
 def _stream_outputs(response: dict[str, object]) -> list[dict[str, object]]:
     raw = response.get("stream")
     if not isinstance(raw, list):
@@ -452,7 +495,7 @@ def _print_batch_progress(state: dict[str, object]) -> None:
         else:
             chunk_frames = 0
         status = str(record.get("status", ""))
-        if status == "COMPLETED":
+        if _is_completed_record(record):
             completed += 1
             frames_completed += chunk_frames
         elif status in TERMINAL_STATUSES:
@@ -482,8 +525,8 @@ def refresh_state(api: RunpodApi, state: dict[str, object], jobs_path: Path) -> 
         if not isinstance(record, dict):
             raise RunpodError("jobs file contains an invalid job record")
         status = str(record.get("status", ""))
-        if status in TERMINAL_STATUSES:
-            if status == "COMPLETED":
+        if status in TERMINAL_STATUSES and (status != "COMPLETED" or _has_valid_result(record)):
+            if _is_completed_record(record):
                 completed += 1
             else:
                 failed += 1
@@ -493,10 +536,7 @@ def refresh_state(api: RunpodApi, state: dict[str, object], jobs_path: Path) -> 
             raise RunpodError("job record has no job id")
         response = api.status(job_id)
         previous_status = status
-        status = str(response.get("status", "UNKNOWN"))
-        record["status"] = status
-        record["last_status"] = response
-        _apply_job_output(record, response.get("output"))
+        status = _store_status_response(record, response)
         if status == "COMPLETED":
             completed += 1
         elif status in TERMINAL_STATUSES:
@@ -518,8 +558,8 @@ def refresh_stream_state(api: RunpodApi, state: dict[str, object], jobs_path: Pa
         if not isinstance(record, dict):
             raise RunpodError("jobs file contains an invalid job record")
         status = str(record.get("status", ""))
-        if status in TERMINAL_STATUSES:
-            if status == "COMPLETED":
+        if status in TERMINAL_STATUSES and (status != "COMPLETED" or _has_valid_result(record)):
+            if _is_completed_record(record):
                 completed += 1
             else:
                 failed += 1
@@ -538,12 +578,13 @@ def refresh_stream_state(api: RunpodApi, state: dict[str, object], jobs_path: Pa
             _apply_job_output(record, output)
             if output.get("type") == "progress" and output != previous:
                 _print_progress_event(record, output)
-        previous_status = status
-        status = str(response.get("status", "UNKNOWN"))
-        record["status"] = status
-        if status == "COMPLETED" and not isinstance(record.get("result"), dict):
+        _apply_job_output(record, response.get("output"))
+        reported_status = str(response.get("status", "UNKNOWN"))
+        if reported_status == "COMPLETED" and not _has_valid_result(record):
             fallback = api.status(job_id)
-            _apply_job_output(record, fallback.get("output"))
+            response = fallback
+        previous_status = status
+        status = _store_status_response(record, response)
         if status == "COMPLETED":
             completed += 1
         elif status in TERMINAL_STATUSES:
@@ -627,8 +668,8 @@ def download_results(jobs_path: Path) -> int:
     jobs = state.get("jobs")
     if not isinstance(jobs, list) or not jobs:
         raise RunpodError("jobs file contains no jobs")
-    if any(not isinstance(record, dict) or record.get("status") != "COMPLETED" for record in jobs):
-        raise RunpodError("all Runpod jobs must be COMPLETED before download")
+    if any(not isinstance(record, dict) or not _is_completed_record(record) for record in jobs):
+        raise RunpodError("all Runpod jobs must be COMPLETED with valid worker results before download")
 
     output = bundle / "output"
     output.mkdir(parents=True, exist_ok=True)
@@ -701,7 +742,11 @@ def retry_failed_jobs(args: argparse.Namespace, jobs_path: Path) -> int:
     failed = [
         record
         for record in jobs
-        if isinstance(record, dict) and str(record.get("status", "")) in TERMINAL_STATUSES - {"COMPLETED"}
+        if isinstance(record, dict)
+        and (
+            str(record.get("status", "")) in TERMINAL_STATUSES - {"COMPLETED"}
+            or (record.get("status") == "COMPLETED" and not _has_valid_result(record))
+        )
     ]
     if not failed:
         print("RUNPOD_RETRY none")

@@ -8,11 +8,13 @@ import os
 from pathlib import Path
 import re
 import selectors
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
 from urllib.parse import urlparse
+from collections import deque
 from collections.abc import Iterator
 
 
@@ -56,6 +58,15 @@ def _run(command: list[str], *, cwd: Path, label: str) -> None:
         raise RuntimeError(f"{label} failed with exit code {completed.returncode}")
 
 
+class BlenderProcessError(RuntimeError):
+    """A failed Blender invocation with a bounded log tail for classification."""
+
+    def __init__(self, label: str, return_code: int, log_tail: str) -> None:
+        super().__init__(f"{label} failed with exit code {return_code}")
+        self.return_code = return_code
+        self.log_tail = log_tail
+
+
 _FRAME_FILE_RE = re.compile(r"^frame_(\d+)\.png$")
 _SAMPLE_PROGRESS_RE = re.compile(
     r"(?:Rendered|Rendering)\s+(\d+)(?:\s*/\s*(\d+))?\s+samples", re.IGNORECASE
@@ -63,6 +74,86 @@ _SAMPLE_PROGRESS_RE = re.compile(
 _BLENDER_CYCLES_PROGRESS_RE = re.compile(
     r"BLENDER_CYCLES_PROGRESS\s+frame=(\d+)\s+sample=(\d+)/(\d+)"
 )
+_OPTIX_FAILURE_MARKERS = (
+    "optix_error_",
+    "failed to load optix kernel",
+    "kernel_optix",
+    "unimplemented ptx intrinsics",
+)
+
+
+def _blender_runner_command(blender_bin: str, bundle: Path) -> list[str]:
+    """Build a Blender runner command that surfaces Python exceptions as failures."""
+
+    return [
+        blender_bin,
+        "--background",
+        "--python-exit-code",
+        "1",
+        "--python",
+        str(bundle / "scripts" / "blender_render.py"),
+        "--",
+    ]
+
+
+def _should_retry_with_cuda(requested_device: str, error: BlenderProcessError) -> bool:
+    """Allow one safe CUDA retry for automatic device selection only.
+
+    ``auto`` and ``gpu`` let the worker choose a suitable NVIDIA backend. An
+    explicit ``optix`` request is intentional and must fail visibly instead of
+    silently changing the requested backend. The retry is limited to known
+    OptiX kernel/compiler failures observed in Blender 5.2 workers.
+    """
+
+    if requested_device.strip().lower() not in {"auto", "gpu"}:
+        return False
+    tail = error.log_tail.lower()
+    return any(marker in tail for marker in _OPTIX_FAILURE_MARKERS)
+
+
+def _with_compute_device(command: list[str], device: str) -> list[str]:
+    """Return a copy of a Blender command with its required --device replaced."""
+
+    try:
+        option_index = command.index("--device")
+        value_index = option_index + 1
+        command[value_index]
+    except (ValueError, IndexError) as exc:
+        raise ValueError("Blender render command is missing a --device value") from exc
+    updated = list(command)
+    updated[value_index] = device
+    return updated
+
+
+def _clear_partial_render_output(output: Path) -> None:
+    """Remove only render artifacts before a clean backend retry.
+
+    Keep the first-chunk asset validation report: it is produced before the
+    render attempt and remains useful in the successful output archive.
+    """
+
+    for path in output.iterdir():
+        is_frame = _FRAME_FILE_RE.fullmatch(path.name) is not None
+        if path.name != "render_report.json" and not is_frame:
+            continue
+        if path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path)
+        else:
+            path.unlink(missing_ok=True)
+
+
+def _load_render_report(report_path: Path) -> dict[str, object]:
+    """Turn missing/corrupt Blender output into a meaningful worker failure."""
+
+    if not report_path.is_file():
+        raise RuntimeError("Cycles chunk render exited without render_report.json")
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Cycles chunk render produced an invalid render_report.json") from exc
+    if not isinstance(report, dict):
+        raise RuntimeError("Cycles chunk render report must be a JSON object")
+    return report
 
 
 def _frame_progress(output: Path, frame_start: int, frame_end: int) -> dict[str, object]:
@@ -173,6 +264,7 @@ def _run_with_progress(
         selector.register(process.stdout, selectors.EVENT_READ)
     last_signature: tuple[object, ...] | None = None
     last_emit = 0.0
+    log_tail: deque[str] = deque(maxlen=200)
     try:
         while True:
             for selected, _ in selector.select(timeout=0.5):
@@ -181,6 +273,7 @@ def _run_with_progress(
                 if not line:
                     selector.unregister(stream)
                     continue
+                log_tail.append(line)
                 print(line, end="", flush=True)
                 event = _progress_from_line(
                     line,
@@ -208,9 +301,11 @@ def _run_with_progress(
                 break
     finally:
         selector.close()
+        if process.stdout is not None:
+            process.stdout.close()
     return_code = process.wait()
     if return_code != 0:
-        raise RuntimeError(f"{label} failed with exit code {return_code}")
+        raise BlenderProcessError(label, return_code, "".join(log_tail))
 
 
 def _curl_download(url: str, destination: Path) -> None:
@@ -383,13 +478,7 @@ def handle_event(event: dict[str, object]) -> Iterator[dict[str, object]]:
         blender_bin = os.environ.get("BLENDER_BIN", "/opt/blender/blender")
         if not Path(blender_bin).is_file():
             raise RuntimeError(f"Blender binary is not available at {blender_bin}")
-        common = [
-            blender_bin,
-            "--background",
-            "--python",
-            str(bundle / "scripts" / "blender_render.py"),
-            "--",
-        ]
+        common = _blender_runner_command(blender_bin, bundle)
         if bool(event_input.get("validate_assets", False)) and chunk["index"] == 0:
             yield _progress_event(chunk_id, "asset_validation", message="validating assets")
             validation_report = bundle / "output" / "asset_validation_report.json"
@@ -423,6 +512,7 @@ def handle_event(event: dict[str, object]) -> Iterator[dict[str, object]]:
         )
         # One request owns one GPU and one Blender process. Horizontal chunking
         # is the responsibility of the client/orchestrator.
+        requested_device = str(manifest.get("requested_compute_device", "auto"))
         command = common + [
             "--mode",
             "render",
@@ -447,28 +537,66 @@ def handle_event(event: dict[str, object]) -> Iterator[dict[str, object]]:
             "--samples",
             str(render["samples"]),
             "--device",
-            str(manifest.get("requested_compute_device", "auto")),
+            requested_device,
             "--denoise" if bool(render.get("denoise", True)) else "--no-denoise",
         ]
         if bool(manifest.get("require_gpu", True)):
             command.append("--require-gpu")
         if script is not None:
             command.extend(("--scene-script", str(script)))
-        yield from _run_with_progress(
-            command,
-            cwd=bundle,
-            label="Cycles chunk render",
-            output=output,
-            frame_start=frame_start,
-            frame_end=frame_end,
-        )
+        used_cuda_fallback = False
+        try:
+            yield from _run_with_progress(
+                command,
+                cwd=bundle,
+                label="Cycles chunk render",
+                output=output,
+                frame_start=frame_start,
+                frame_end=frame_end,
+            )
+        except BlenderProcessError as error:
+            if not _should_retry_with_cuda(requested_device, error):
+                raise
+            # Blender is a fresh process for the fallback. This avoids a
+            # half-initialized OptiX backend carrying into the CUDA retry while
+            # retaining --require-gpu on the copied command.
+            _clear_partial_render_output(output)
+            used_cuda_fallback = True
+            yield _progress_event(
+                chunk_id,
+                "render",
+                message="OptiX kernel initialization failed; retrying this chunk with CUDA",
+                frame_start=frame_start,
+                frame_end=frame_end,
+                frames_completed=0,
+                frames_total=frame_end - frame_start + 1,
+                percent=0.0,
+                compute_device="cuda",
+            )
+            yield from _run_with_progress(
+                _with_compute_device(command, "cuda"),
+                cwd=bundle,
+                label="Cycles chunk render (CUDA fallback)",
+                output=output,
+                frame_start=frame_start,
+                frame_end=frame_end,
+            )
 
         report_path = output / "render_report.json"
-        report = json.loads(report_path.read_text(encoding="utf-8"))
+        report = _load_render_report(report_path)
         if report.get("engine") != "CYCLES" or report.get("render_executed") is not True:
             raise RuntimeError("Blender report does not prove a completed Cycles render")
         if bool(manifest.get("require_gpu", True)) and report.get("render_device") != "GPU":
             raise RuntimeError("Blender report does not prove GPU rendering")
+        if used_cuda_fallback:
+            report["worker_compute_fallback"] = {
+                "from": requested_device,
+                "to": "cuda",
+                "reason": "OptiX kernel/compiler initialization failed",
+            }
+            report_path.write_text(
+                json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
         yield _progress_event(chunk_id, "verify", message="verifying rendered frames")
         _verify_chunk(bundle, frame_start, frame_end, render["width"], render["height"])
         yield _progress_event(chunk_id, "verify", message="frame verification passed")
@@ -478,7 +606,7 @@ def handle_event(event: dict[str, object]) -> Iterator[dict[str, object]]:
         yield _progress_event(chunk_id, "upload", message="uploading output archive")
         _curl_upload(output_upload_url, output_archive)
         yield _progress_event(chunk_id, "upload", message="output archive uploaded")
-        yield {
+        result: dict[str, object] = {
             "schema_version": 1,
             "type": "result",
             "chunk_id": chunk_id,
@@ -487,7 +615,18 @@ def handle_event(event: dict[str, object]) -> Iterator[dict[str, object]]:
             "frame_end": frame_end,
             "render_device": report.get("render_device"),
             "render_engine": report.get("engine"),
+            "requested_compute_device": requested_device,
             "archive_sha256": sha256_file(output_archive),
             "archive_size": output_archive.stat().st_size,
             "output_download_url": output_download_url,
         }
+        cycles = report.get("cycles")
+        if isinstance(cycles, dict) and cycles.get("compute_backend") is not None:
+            result["compute_backend"] = cycles["compute_backend"]
+        if used_cuda_fallback:
+            result["compute_device_fallback"] = {
+                "from": requested_device,
+                "to": "cuda",
+                "reason": "OptiX kernel/compiler initialization failed",
+            }
+        yield result

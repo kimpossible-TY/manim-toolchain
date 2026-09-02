@@ -185,6 +185,70 @@ class RunpodRenderJobTests(unittest.TestCase):
             self.assertEqual(cycles_event["samples_completed"], 16)
             self.assertEqual(cycles_event["samples_total"], 32)
 
+    def test_worker_blender_command_propagates_python_exceptions(self) -> None:
+        worker = load_module("runpod_worker_command_test", ROOT / "runpod" / "worker" / "core.py")
+        command = worker._blender_runner_command("/opt/blender/blender", Path("/bundle"))
+        self.assertEqual(
+            command,
+            [
+                "/opt/blender/blender",
+                "--background",
+                "--python-exit-code",
+                "1",
+                "--python",
+                "/bundle/scripts/blender_render.py",
+                "--",
+            ],
+        )
+
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            with self.assertRaises(worker.BlenderProcessError) as raised:
+                list(
+                    worker._run_with_progress(
+                        [
+                            sys.executable,
+                            "-c",
+                            "import sys; print('scene script traceback'); sys.exit(1)",
+                        ],
+                        cwd=Path(directory),
+                        label="test Blender command",
+                        output=Path(directory),
+                        frame_start=1,
+                        frame_end=1,
+                    )
+                )
+        self.assertEqual(raised.exception.return_code, 1)
+        self.assertIn("scene script traceback", raised.exception.log_tail)
+
+    def test_worker_retries_only_automatic_optix_failures_with_cuda(self) -> None:
+        worker = load_module("runpod_worker_optix_test", ROOT / "runpod" / "worker" / "core.py")
+        optix_error = worker.BlenderProcessError(
+            "Cycles chunk render",
+            1,
+            "ERROR Failed to load OptiX kernel (OPTIX_ERROR_INTERNAL_COMPILER_ERROR)",
+        )
+        self.assertTrue(worker._should_retry_with_cuda("auto", optix_error))
+        self.assertTrue(worker._should_retry_with_cuda("gpu", optix_error))
+        self.assertFalse(worker._should_retry_with_cuda("optix", optix_error))
+        self.assertFalse(worker._should_retry_with_cuda("cuda", optix_error))
+        scene_error = worker.BlenderProcessError(
+            "Cycles chunk render", 1, "Traceback: scene script failed"
+        )
+        self.assertFalse(worker._should_retry_with_cuda("auto", scene_error))
+
+        fallback = worker._with_compute_device(
+            ["blender", "--device", "auto", "--require-gpu"], "cuda"
+        )
+        self.assertEqual(fallback, ["blender", "--device", "cuda", "--require-gpu"])
+
+    def test_worker_missing_render_report_is_a_clear_failure(self) -> None:
+        worker = load_module("runpod_worker_report_test", ROOT / "runpod" / "worker" / "core.py")
+        with TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(
+                RuntimeError, "exited without render_report.json"
+            ):
+                worker._load_render_report(Path(directory) / "render_report.json")
+
     def test_stream_refresh_persists_progress_without_printing_urls(self) -> None:
         client = load_module("runpod_client_stream_test", ROOT / "scripts" / "runpod_client.py")
 
@@ -231,6 +295,107 @@ class RunpodRenderJobTests(unittest.TestCase):
             self.assertNotIn("https://", captured.getvalue())
             updated = json.loads(jobs_path.read_text(encoding="utf-8"))
             self.assertEqual(updated["jobs"][0]["progress"]["frames_completed"], 2)
+
+    def test_completed_without_valid_result_is_rechecked_and_not_counted_as_success(self) -> None:
+        client = load_module("runpod_client_missing_result_test", ROOT / "scripts" / "runpod_client.py")
+
+        class FakeApi:
+            calls = 0
+            responses = [
+                {"status": "COMPLETED"},
+                {"status": "FAILED", "error": "worker failed before producing a result"},
+            ]
+
+            def status(self, job_id: str) -> dict[str, object]:
+                self.calls += 1
+                return self.responses.pop(0)
+
+        with TemporaryDirectory() as directory:
+            jobs_path = Path(directory) / "jobs.json"
+            state = {
+                "schema_version": 1,
+                "jobs": [
+                    {
+                        "chunk_id": "chunk-0000-000001-000001",
+                        "frame_start": 1,
+                        "frame_end": 1,
+                        "job_id": "job-1",
+                        "status": "COMPLETED",
+                        "result": {"archive_sha256": "not-a-sha256"},
+                    }
+                ],
+            }
+            jobs_path.write_text(json.dumps(state), encoding="utf-8")
+            api = FakeApi()
+            completed, failed = client.refresh_state(api, state, jobs_path)
+            self.assertEqual((completed, failed), (0, 0))
+            self.assertEqual(api.calls, 1)
+            self.assertEqual(state["jobs"][0]["status"], "RESULT_PENDING")
+
+            completed, failed = client.refresh_state(api, state, jobs_path)
+            self.assertEqual((completed, failed), (0, 1))
+            self.assertEqual(api.calls, 2)
+            self.assertEqual(state["jobs"][0]["status"], "FAILED")
+
+    def test_stream_completed_without_result_uses_status_fallback(self) -> None:
+        client = load_module("runpod_client_stream_missing_result_test", ROOT / "scripts" / "runpod_client.py")
+
+        class FakeApi:
+            status_calls = 0
+
+            def stream(self, job_id: str) -> dict[str, object]:
+                return {"status": "COMPLETED", "stream": []}
+
+            def status(self, job_id: str) -> dict[str, object]:
+                self.status_calls += 1
+                return {"status": "FAILED", "error": "worker failed before producing a result"}
+
+        with TemporaryDirectory() as directory:
+            jobs_path = Path(directory) / "jobs.json"
+            state = {
+                "schema_version": 1,
+                "jobs": [
+                    {
+                        "chunk_id": "chunk-0000-000001-000001",
+                        "frame_start": 1,
+                        "frame_end": 1,
+                        "job_id": "job-1",
+                        "status": "IN_PROGRESS",
+                    }
+                ],
+            }
+            jobs_path.write_text(json.dumps(state), encoding="utf-8")
+            api = FakeApi()
+            completed, failed = client.refresh_stream_state(api, state, jobs_path)
+            self.assertEqual((completed, failed), (0, 1))
+            self.assertEqual(api.status_calls, 1)
+            self.assertEqual(state["jobs"][0]["status"], "FAILED")
+
+    def test_completed_record_with_valid_result_remains_successful(self) -> None:
+        client = load_module("runpod_client_valid_result_test", ROOT / "scripts" / "runpod_client.py")
+
+        class FakeApi:
+            def status(self, job_id: str) -> dict[str, object]:
+                raise AssertionError(f"valid completed job should not be polled: {job_id}")
+
+        with TemporaryDirectory() as directory:
+            jobs_path = Path(directory) / "jobs.json"
+            state = {
+                "schema_version": 1,
+                "jobs": [
+                    {
+                        "chunk_id": "chunk-0000-000001-000001",
+                        "frame_start": 1,
+                        "frame_end": 1,
+                        "job_id": "job-1",
+                        "status": "COMPLETED",
+                        "result": {"archive_sha256": "a" * 64},
+                    }
+                ],
+            }
+            jobs_path.write_text(json.dumps(state), encoding="utf-8")
+            completed, failed = client.refresh_state(FakeApi(), state, jobs_path)
+            self.assertEqual((completed, failed), (1, 0))
 
     def test_safe_extract_rejects_traversal(self) -> None:
         utils = load_module("runpod_utils_test", ROOT / "scripts" / "runpod_job_utils.py")
@@ -480,6 +645,7 @@ class RunpodRenderJobTests(unittest.TestCase):
                         "frame_end": 119,
                         "job_id": "completed-job-1",
                         "status": "COMPLETED",
+                        "result": {"archive_sha256": "b" * 64},
                     },
                 ],
             }

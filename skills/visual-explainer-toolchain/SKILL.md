@@ -237,6 +237,16 @@ sample fields are included when Blender emits sample statistics. Use
 `wait --stream` when a script should retain the normal wait command while
 showing the same live progress.
 
+Before a first production batch on a new endpoint or heterogeneous GPU pool,
+submit a one-frame Cycles compatibility probe and inspect its worker report.
+GPU enumeration alone is not proof that a backend can compile its render kernel.
+Record the selected backend and GPU model. The worker retries a recognized
+OptiX/PTX initialization failure once with CUDA for `auto` or `gpu`; an explicit
+OptiX request fails as requested. Inspect that fallback report before scaling a
+batch, or route it to a compatible, pinned GPU pool. A Runpod job is successful
+only when `COMPLETED` includes a worker result with an output archive digest;
+`COMPLETED` without that result remains pending or failed, never render success.
+
 Read [`guides/runpod.md`](guides/runpod.md) for the manifest, signed URL
 boundary, worker image, chunk orchestration, and verification details.
 
