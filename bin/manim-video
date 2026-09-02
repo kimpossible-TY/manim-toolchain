@@ -43,7 +43,7 @@ if [[ -f "$TOOLCHAIN_DIR/.env" ]]; then
         --frozen \
         --no-managed-python \
         --env-file "$filtered_env_file" \
-        -- manim "$@"
+        -- python -m manim "$@"
 fi
 
 exec "$UV_BIN" run \
@@ -51,4 +51,4 @@ exec "$UV_BIN" run \
     --frozen \
     --no-managed-python \
     --no-env-file \
-    -- manim "$@"
+    -- python -m manim "$@"
