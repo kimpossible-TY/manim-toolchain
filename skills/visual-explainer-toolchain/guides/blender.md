@@ -4,16 +4,18 @@ Read this when a request genuinely needs Blender-level materials, lighting,
 assets, transparency, cinematic camera work, rigging, volumetrics, or geometry
 work.
 
-## macOS host-execution requirement
+## macOS hardware access
 
-Run every local `visual-blender`, `visual-blender-preview`, or
-`visual-blender-render` command with host/outside-sandbox execution permission
-on macOS. Blender 5.x initializes its Metal backend before Python, including in
+Local `visual-blender`, `visual-blender-preview`, and
+`visual-blender-render` commands need hardware access on macOS. An unrestricted
+runner can execute them directly without an approval request.
+Blender 5.x initializes its Metal backend before Python, including in
 background mode. If a restricted runner hides the hardware or Metal device
 identity, Blender 5.2 can crash in device detection before the requested scene
 script is evaluated.
 
-The permission must be granted to the top-level wrapper invocation. A shell
+If a restricted runner blocks access, any supported host-execution permission
+must apply to the top-level wrapper invocation. A shell
 wrapper cannot escape its parent sandbox, and neither `--background` nor
 `--factory-startup` bypasses Metal initialization. The macOS Blender 5.2 build
 does not provide OpenGL as an alternate backend, so `--gpu-backend opengl` is
@@ -21,7 +23,13 @@ not a workaround. `visual-blender` checks for restricted hardware access first
 and exits with status 77 and a concise instruction when host execution is
 required.
 
-## Workflow: Local EEVEE preview -> Runpod Pod Cycles -> Local FFmpeg
+## Default workflow: Local iteration -> Runpod Pod Cycles -> Local FFmpeg
+
+Follow the [main skill's mode selection](../SKILL.md#select-and-retain-the-blender-render-mode).
+Keep the user's established mode and cost authorization across iterations.
+Short local Cycles material tests and bounded local production are available
+when they suit the brief and hardware budget; EEVEE is not restricted to drafts
+if its output meets the requested final look.
 
 1. **Local EEVEE preview**:
    Validate composition, materials, camera, and timing locally at configurable
@@ -42,7 +50,7 @@ required.
    bundle validation. Pack small assets directly; put large licensed assets in
    the explicit `assets/` directory.
 
-3. **Runpod Pod execution (default for all Blender production renders)**:
+3. **Runpod Pod execution (default for substantial Blender production renders)**:
    Package the portable bundle and submit its complete frame range to one
    disposable GPU Pod:
 
@@ -85,6 +93,6 @@ For local rendering with parallel worker chunking or CPU fallback diagnostics,
 
 ```sh
 visual-blender-render --scene scene.blend --scene-script scenes/hero.py \
-  --output media/blender/frame_ --frame-start 1 --frame-end 240 \
+  --output /private/tmp/visual-blender-diagnostic/frame_ --frame-start 1 --frame-end 240 \
   --width 1920 --height 1080 --workers 6 --engine eevee
 ```

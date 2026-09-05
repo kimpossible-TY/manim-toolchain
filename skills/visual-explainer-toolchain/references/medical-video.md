@@ -1,139 +1,94 @@
-# Medical patient-education video direction
+# Medical video direction and user review
 
-Read this reference before writing or storyboarding a medical, clinical
-procedure, vaccine, pharmaceutical, or healthcare-marketing video. Its purpose
-is to provide clear, high-impact scientific visualization and support informed
-consultation.
+Read this reference when drafting or storyboarding medical, clinical-procedure,
+vaccine, pharmaceutical, or healthcare marketing videos. It offers production
+choices and review-note practices. Clinical interpretation, advertising suitability,
+visual intensity, and publication decisions belong to the user or their designated
+reviewer. Pending review does not block drafting, rendering, or delivery.
 
-This is a direction and production guide. Final regulatory compliance, tone
-moderation, and clinical review are managed by the user during final inspection.
+## Start from the brief
 
-## Required claim and release gates
+Identify the topic, audience, intended effect, delivery format, and visual ambition
+from the request and project context. Country, publication context, and named
+products can inform review notes. If unknown, record the uncertainty and continue
+independent creative work; ask only when the answer materially changes the task.
 
-Before drafting facts, establish the publication country, whether the video is
-patient education or promotion, and whether it names a regulated product or
-procedure. Ask when any of these are unclear.
+The user may want patient education, a mechanism demonstration, a dramatic
+clinical sequence, product communication, or another treatment. Do not turn all
+requests into a calm consultation invitation or a fixed patient-journey template.
 
-- Use only current, approved source material for indications, eligibility,
-  schedules, comparative statements, prices, safety information, and outcome
-  claims. Record the source, access date, jurisdiction, and exact approved
-  wording in a claim ledger.
-- Have a qualified clinician review the clinical accuracy of the script and
-  final cut. Do not turn general information into personal medical advice.
-- Obtain the required local medical-advertising and, where relevant,
-  pharmaceutical-advertising review before publication. Do not imply that this
-  guide or a source page establishes compliance.
-- For Korean work, use the current official medical-advertising guidance and,
-  when a prescription medicine or its information is in scope, the current
-  MFDS guidance as review inputs. Confirm the applicable version with the
-  responsible reviewer.
+## Sources support review
 
-Exclude by default, pending qualified approval, treatment or prevention
-guarantees, superiority or price claims, patient testimonials, before/after
-comparisons, omission of material safety information, and statements that a
-consultation, screening, or follow-up is unnecessary. Do not invent efficacy
-figures, target ages, dosing schedules, contraindications, recovery times, or
-adverse-effect claims.
+Record substantive medical claims and available primary or official sources in
+the project's claim ledger. Include draft wording, scene, source/access date,
+jurisdiction when relevant, and the exact uncertainty. Reuse existing entries.
+Do not invent efficacy figures, schedules, contraindications, patient data, or
+supporting evidence. Keep user-provided claims distinguishable from independently
+source-linked statements.
 
-## Medical explainer cinematic style
+Source linkage does not establish clinical or advertising approval. Use separate
+evidence and user-review statuses. Missing evidence, unreviewed copy, comparative
+claims, prices, testimonials, before/after sequences, and product information are
+review topics, not automatic exclusions from a requested draft.
 
-Deliver high-impact visual storytelling, dynamic camera choreography, and
-physically credible 3D biomedical visualization. Use cinematic 3D cross-sections,
-depth-staged micro/macro environments, dynamic camera fly-throughs, and crisp
-motion graphics.
+Keep review questions and possible qualifications in a companion document.
+Do not automatically soften the user's wording, add recurring disclaimers,
+hide requested anatomy, or omit a scene because AI anticipates a suitability
+objection. Present editorial alternatives when useful and follow user feedback.
+Do not mark medical/legal checks as passed or user review as complete without
+actual reviewer confirmation.
 
-Do not artificially suppress camera dynamics, dramatic tension, high-contrast
-lighting, or realistic physiological interactions during the creative rendering
-stage. The visual pipeline should maximize immersion, spatial depth, and
-explanatory impact. Tone moderation and regulatory audience suitability are
-handled by the user during final review.
+## Visual options
 
-### Visual routing
+Choose the visual language for its role in the story. Medical subject matter
+places no extra ban on dramatic tension, blood-red imagery, high contrast,
+realistic physiological interactions, expressive narration, or camera dynamics.
+It also does not require high-energy cutting or maximum detail in every shot.
 
-| Beat | Preferred treatment |
+| Visual job | Available treatments |
 | --- | --- |
-| A question, eligibility check, visit timeline, consent, aftercare, or summary | Dynamic Manim cards, animated icons, or sleek motion graphics |
-| An internal structure, cellular mechanism, or treatment location | High-fidelity 3D cross-section or cinematic Blender shot with dynamic camera |
-| A complex biological process that needs spatial depth | Rich PyGfx or Blender scene with depth of field, SSS shaders, and particle systems |
-| Consultation, examination, procedure, and follow-up journey | Engaging timeline, stylized 3D human figures, or technical procedure animatics |
+| Question, eligibility factors, timeline, aftercare, summary | Typography, still diagrams, animated icons, motion graphics, or a staged scene |
+| Internal anatomy, tissue, cells, treatment location | Schematic cutaway, stylized 3D, realistic Blender sequence, or mixed media |
+| Complex spatial process | PyGfx, Blender, or a simulation when its behavior contributes to the explanation |
+| Consultation, examination, procedure, follow-up | Timeline, character animation, live-action assets, procedure animatic, or another brief-led treatment |
 
-Use Blender freely for internal-anatomy, tissue, and cellular shots whenever its
-lighting, subsurface scattering, volumetrics, camera dynamics, and physical
-interactions elevate the visual quality. Model anatomical structures, microscopic
-pathogens, and immune mechanisms with tangible fidelity and purposeful motion.
+Blender may own a whole sequence or individual shots. Use detail, SSS,
+volumetrics, depth of field, and particles where the selected look benefits.
+Intentional abstraction and blocking primitives are valid; finish visible assets
+to the requested stage and viewing distance.
 
-## Narrative templates
+## Optional narrative approaches
 
-Choose the template that fits the actual decision; do not turn an education
-video into a disguised sales pitch.
+A prevention video might connect an everyday question with a macro-to-micro
+mechanism reveal, decision factors, and a next step. A procedure video might
+follow location, mechanism, patient experience, and recovery. A mechanism-led
+film can stay inside the anatomy for the entire sequence.
 
-### Vaccine or prevention consultation — 60-second example
+These are starting points. Choose the sequence, time allocation, and ending from
+the actual brief. A consultation CTA, a 60-second duration, rapid micro-shots, or
+a prescribed proportion of 2D and 3D is not required. Product labels and other
+references provide evidence for user review, not permission granted by this guide.
 
-| Time | Visual | Role |
-| --- | --- | --- |
-| 0–5 s | Ordinary life, a parent-and-child moment, or a neutral silhouette | State the consultation question clearly and engagingly. |
-| 5–16 s | Macro-to-micro fly-through into tissue cross-section | Dynamic camera move into the cellular/mucosal environment. |
-| 16–28 s | Dynamic 3D immune response & mechanism | Visually demonstrate the interaction between antibodies and pathogens. |
-| 28–40 s | Cards and calendar | Show the factors a clinician checks: age, prior history, and health context. Do not supply unreviewed criteria or schedules. |
-| 40–50 s | Procedure, administration, or mechanism in action | Clear, visually compelling demonstration of the clinical mechanism. |
-| 50–60 s | Engaging end card | Invite a consultation about individual suitability and timing; use only a reviewed CTA. |
+## Narration, labeling, and delivery
 
-For a branded vaccine such as Gardasil 9, keep the video focused on consultation
-and prevention education. Do not copy claims, statistics, eligibility, or
-limitation wording from a manufacturer page into a clinic video without a
-current label-and-advertising review.
+Keep spoken prose separate from code, on-screen copy, and source notes. Follow
+the project's voice identity while allowing expressive range and pacing.
+Use wording that conveys the intended meaning; do not mechanically replace
+statements with “도움을 줍니다” or “의료진과 상의하세요.”
 
-### Procedure consultation
+Discuss necessary distinctions or possible ambiguity in review notes. The user
+decides the final disclaimer, diagram label, CTA, and their placement. When text
+is included, give it readable screen time rather than forcing a universal
+maximum hold. Do not represent illustrative animation as measured patient data.
 
-Use a patient-journey explainer:
+Deliver the requested export and review materials. Follow the user's publication
+authorization without inventing an additional approval gate. Report technical
+verification separately from the user's clinical or editorial sign-off.
 
-```text
-question or discomfort -> internal structure -> what the clinician assesses
-  -> principle and boundaries of the procedure -> recovery and precautions
-  -> consultation / next step
-```
+## Review inputs when requested
 
-Show the location with a transparent cross-section, soft light, or a simplified
-mechanism diagram. Explain what assessment may cover and what the procedure is
-intended to address, without asserting that it will produce a particular result
-for the viewer. Make recovery, precautions, and follow-up visible when they are
-clinically relevant and have been reviewed.
-
-## Language and narration
-
-Prefer qualified, patient-centered wording such as “for prevention,” “to be
-confirmed in consultation,” “an individual plan,” and “discuss suitability and
-timing with a clinician.” Do not use unreviewed language such as “eliminates,”
-“perfect prevention,” “everyone must,” “painless,” “lowest price,” or “no
-screening is needed after this.”
-
-Narrate the meaning of a medical visual in plain language. Keep the spoken
-script separate from technical notation and from any on-screen claim source.
-Leave enough quiet time for a viewer to read a safety qualification or decision
-factor; never hide it in an accelerated disclaimer.
-
-## Reference visual language
-
-These references inform visual grammar, not clinical claims or content that may
-be copied verbatim:
-
-| Reference | Borrow | Avoid |
-| --- | --- | --- |
-| [Nucleus Medical Media — HPV overview](https://www.youtube.com/watch?v=AZOnAuElJHk) | Clean cross-sections that relate tissue and process | Extended anatomy lectures or unnecessary photorealism |
-| [Osmosis — HPV vaccine mechanism](https://www.youtube.com/watch?v=jq346hkaEec) | Compression of mechanism into color, icons, and diagrams | Exam-prep information overload |
-| [CHOP — HPV resources](https://www.chop.edu/vaccine-education-center/resources/vaccine-videos-and-dvds/hpv-human-papillomavirus) | Calm FAQ treatment of sensitive questions | Applying U.S. recommendations to another jurisdiction without review |
-| [Mayo Clinic Minute — HPV vaccine](https://www.youtube.com/watch?v=TQkZ97bKqoY) | A brief clinician explanation tied to a next step | Presenting a clinician’s authority as an outcome guarantee |
-| [KDCA 아프지마TV — HPV](https://www.youtube.com/watch?v=_XFRZXLmMys) | Inclusive, non-stigmatizing Korean public-health tone | Copying public-campaign pacing or recommendations without adaptation |
-
-The desired combination is high-impact 3D anatomy, cinematic visual pacing, and
-crisp information hierarchy. Utilize dynamic camera reveals, macro-to-micro
-transitions, and rich lighting to make internal mechanisms captivating and legible.
-
-## Korean review inputs
-
-Check the current versions, not just the links below, with the organization’s
-qualified reviewer:
-
-- [Gangnam-gu notice linking the 2025 Medical Advertising Guidelines and related legal materials](https://www.gangnam.go.kr/board/B_000001/1075332/view.do?mid=ID05_040101)
-- [MFDS: Pharmaceutical Advertising and Prescription Drug Information-Providing Guidelines](https://www.mfds.go.kr/brd/m_1060/view.do?company_cd=&company_nm=&itm_seq_1=0&itm_seq_2=0&multi_itm_seq=0&page=69&seq=15160&srchFr=&srchTo=&srchTp=&srchWord=)
-- [Gardasil 9 Korea product information](https://gardasil9.co.kr/gardasil9/)
+When the user requests a clinical or regulatory review, consult current primary
+and official sources for the relevant country and topic. For Korean projects,
+applicable medical-advertising guidance, MFDS materials, and official product
+information can be useful inputs. Record versions and open questions; do not
+treat a previously linked page or this guide as an approval certificate.

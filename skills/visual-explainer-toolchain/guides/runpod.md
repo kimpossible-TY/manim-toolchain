@@ -1,8 +1,10 @@
 # Runpod Pod Blender/Cycles workflow
 
-Runpod Pods are the production backend for Blender Cycles image sequences in
-this toolchain. Local macOS rendering remains useful for EEVEE composition
-previews, while one disposable Linux GPU Pod renders one complete production
+Runpod Pods are the default backend for substantial Blender Cycles sequences.
+Use this guide after selecting remote rendering under the
+[main skill's mode and budget guidance](../SKILL.md#select-and-retain-the-blender-render-mode).
+Local EEVEE/Cycles iteration and suitable bounded local production remain available.
+For a remote job, one disposable Linux GPU Pod renders the complete requested
 frame range.
 
 ## Components and ownership

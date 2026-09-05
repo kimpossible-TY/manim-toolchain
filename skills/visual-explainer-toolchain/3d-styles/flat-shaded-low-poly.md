@@ -2,7 +2,10 @@
 
 This guide defines the aesthetic, modeling, shading, lighting, and motion standards for **Flat-shaded Low-Poly** assets and scenes.
 
-All assets created under this style must adhere to the overarching credibility and craft principles in [`README.md`](README.md). Low polygon count controls geometric density; it does **not** justify lazy topology, arbitrary colors, weightless motion, or disconnected staging.
+Use the overarching craft guidance in [`README.md`](README.md). This guide's
+toy-diorama recipe is one flat-shaded treatment; camera, sound, palette, and
+motion remain brief-led choices. Numeric settings below are starting points,
+not universal quality gates. Preserve intentional facet normals for this style.
 
 ---
 
@@ -63,14 +66,14 @@ Flat-shaded objects rely entirely on light angle to define their 3D shape. Flat,
 
 ## 5. Motion, Physics & Camera
 
-Adhere strictly to the kinetic standards of [`README.md`](README.md):
+Choose from these techniques when the brief calls for a kinetic toy-diorama look:
 
-- **Tactile Weight & Recoil**: When low-poly objects drop, assemble, or slide into frame, apply 5–10% spring overshoot (`ease_out_back`) and slight secondary settles. Avoid robotic linear deceleration.
-- **Squash & Stretch**: For rapid movement (e.g. hops, impacts, pop-ins), apply volume-preserving velocity-aligned squash and stretch (1.1x / 0.9x).
+- **Tactile Weight & Recoil**: Optional spring overshoot and secondary settling can emphasize a landing. Choose amplitude from the object; linear or non-overshooting motion is also valid.
+- **Squash & Stretch**: Optional volume-preserving deformation can emphasize hops, impacts, or pop-ins. Rigid objects may keep their shape.
 - **Camera Staging**:
   - **Isometric / Long Lens**: Orthographic or narrow FOV (85mm–135mm focal length equivalent) enhances the miniature diorama feel.
-  - **Dynamic Explainer Cuts**: For fast-paced social explainers, use brisk S-curve camera moves, 1.25x snap punch-ins, and micro-beat cuts (< 3.5s per composition).
-- **SFX Synchronization**: Low-poly motion must hit with acoustic weight. Pair arrivals, clicks, and rotations with wooden, plastic, or damped percussive clicks within ±1 frame.
+  - **Dynamic Explainer Cuts**: S-curve moves, snap punch-ins, and micro-beats are available for fast scenes; choose hold lengths from the content without a time cap.
+- **SFX Synchronization**: Wooden, plastic, or damped clicks can support selected accents. Silence and ambience are valid; align chosen effects perceptually with the action.
 
 ---
 
@@ -117,7 +120,7 @@ material = gfx.MeshPhongMaterial(
 
 ---
 
-## 7. Quality Gate Checklist
+## 7. Relevant Quality Checks
 
 Before publishing or rendering final low-poly shots:
 
@@ -125,7 +128,7 @@ Before publishing or rendering final low-poly shots:
 - [ ] Non-planar quads are triangulated to prevent engine-specific shading artifacts.
 - [ ] Silhouette communicates the object's identity and function without labels.
 - [ ] Lighting angles produce distinct luminance on adjacent polygon facets.
-- [ ] Color palette is constrained (3–5 tones) with clear value hierarchy.
+- [ ] The chosen palette has a clear value hierarchy.
 - [ ] Ambient occlusion and contact shadows firmly anchor the object to its ground plane.
-- [ ] Animations employ spring overshoot (`ease_out_back`) and tangible physical mass.
-- [ ] Audio effects (clicks, thuds, pops) are synchronized within ±1 frame.
+- [ ] Motion and any deformation fit the chosen art direction.
+- [ ] Selected effects are synchronized and the mix supports the intended listening experience.

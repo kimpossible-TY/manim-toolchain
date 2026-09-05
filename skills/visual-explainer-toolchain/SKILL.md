@@ -1,6 +1,6 @@
 ---
 name: visual-explainer-toolchain
-description: Create or verify clear explanatory videos, scientific 3D visualizations, simulations, and selectively high-fidelity mixed-media segments with the shared Manim, PyGfx, Taichi, Blender, and FFmpeg toolchain.
+description: Create or verify explanatory videos, scientific 3D visualizations, simulations, and mixed-media scenes with the shared Manim, PyGfx, Taichi, Blender, and FFmpeg toolchain, matching the user's visual direction and production budget.
 ---
 
 # Visualization & Video Toolchain
@@ -12,10 +12,15 @@ scenes, assets, configuration, and generated media.
 
 The governing principle is:
 
-> Select the simplest engine that communicates the intended idea, and justify every escalation in terms of visible benefit.
+> Match the engine and production effort to the requested visual result, iteration needs, and available budget.
 
 The user normally describes the desired visual result. Choose the engine, but
 honor an explicit override unless a concrete constraint makes it impossible.
+
+Creative techniques in this skill and its references are options. User direction
+and established project choices take precedence over example pacing, cameras,
+sound, or visual styles. Keep technical output checks separate from editorial
+judgment; pending medical or advertising review does not block generation.
 
 ## Preserve the central architecture
 
@@ -36,18 +41,20 @@ honor an explicit override unless a concrete constraint makes it impossible.
 
 ### macOS local Blender process boundary
 
-On macOS, invoke `visual-blender`, `visual-blender-preview`, and
-`visual-blender-render` with host/outside-sandbox execution permission. Blender
+On macOS, `visual-blender`, `visual-blender-preview`, and
+`visual-blender-render` need hardware access from their parent runner. Blender
 5.x initializes Metal before running Python even in `--background` mode. A
 restricted runner can withhold the Metal device identity, causing Blender 5.2
 to exit during GPU backend detection before a scene script starts.
 
 This permission belongs to the parent process runner; it is not a Blender CLI
-flag and the wrapper must not attempt to elevate itself. In Codex, request the
-narrow host-execution approval for the selected central Blender wrapper before
-calling it. If approval is unavailable, do not repeatedly launch Blender or try
-`--gpu-backend opengl`; use the Runpod path when appropriate or report that the
-local preview is unavailable. The central `visual-blender` wrapper performs a
+flag and the wrapper must not attempt to elevate itself. When the runner already
+has unrestricted hardware access, execute normally without an approval request.
+Only if an actual restricted runner blocks access, use its supported narrow
+host-execution approval mechanism if available. If access remains unavailable,
+do not repeatedly launch Blender or try `--gpu-backend opengl`; continue
+independent work, use an authorized remote path, or report the local limitation.
+The central `visual-blender` wrapper performs a
 macOS hardware-access preflight and exits with status 77 plus an actionable
 message instead of allowing the known Metal startup crash.
 
@@ -61,24 +68,24 @@ Choose technology after identifying the visual job that each segment must do.
 | Meshes, surfaces, point clouds, spatial fields, camera perspective, or lightweight scientific 3D | PyGfx |
 | Analytically prescribed motion with modest state | NumPy + PyGfx |
 | Many evolving particles/grids/fields, PDEs, or compute-heavy deformation | Taichi + PyGfx |
-| Materials, lighting, anatomy, imported assets, volumetrics, rigging, or a cinematic shot that materially benefits | Blender (Runpod Pod) |
+| Materials, lighting, anatomy, imported assets, volumetrics, rigging, or cinematic shots | Blender (local iteration; Runpod by default for substantial production) |
 | Beats that need different rendering strengths | Mixed segments + FFmpeg |
 
-Do not choose Blender because an object is three-dimensional, or Taichi because
-an object moves. Blender normally contributes one or a few shots whose material
-or lighting makes a visible difference; Manim keeps explanatory graphics clear,
-dynamic, and responsive.
+Consider the whole sequence, existing assets, and cost of crossing engines.
+Blender can own one shot or the complete video when that suits the brief.
+Use Manim for graphics and Taichi for evolving state when they help; an engine
+choice does not need a separate creative approval or a per-shot justification.
 
 Useful routing checks:
 
 - An annotated process or product-flow diagram: Manim.
-- Kinetic typography, word-by-word emphasis, animated counters/gauges, or rapid-fire UI cards: Manim (with elastic rate functions and MovingCameraScene snap zooms).
+- Kinetic typography, word-by-word emphasis, animated counters/gauges, or rapid-fire UI cards: Manim (elastic easing and MovingCameraScene are optional techniques).
 - Transparent motion graphics plates over 3D backgrounds: Manim with alpha output.
 - A triangulated model or spatial dataset: PyGfx.
 - Tens of thousands of evolving particles: Taichi + PyGfx; benchmark locally
   before considering remote compute.
-- A realistic translucent organ, material, or environment: Blender (rendered
-  in a disposable Runpod Pod).
+- A realistic translucent organ, material, or environment: Blender; choose the
+  render location using the mode guidance below.
 - An explainer plus one photorealistic establishing shot: Manim + short Blender
   shot (Runpod Pod) + FFmpeg.
 - A rotating object: Manim or PyGfx unless realistic rendering is explicitly
@@ -111,9 +118,9 @@ specific to that format and must not be applied by default to other subjects.
 For a medical, clinical-procedure, vaccine, pharmaceutical, or healthcare
 marketing video, read
 [`references/medical-video.md`](references/medical-video.md) before drafting
-claims or storyboarding. It defines patient-education direction and mandatory
-clinical, regulatory, and advertising-review gates; it is not medical or legal
-approval for a particular script.
+claims or storyboarding. It offers direction and source-note practices while
+leaving clinical, regulatory, and advertising decisions to the user. Those
+decisions are not prerequisites for drafting, rendering, or delivering a video.
 
 When 3D assets, styles, or physical credibility are part of the deliverable,
 **you must read [`3d-styles/README.md`](3d-styles/README.md) before authoring any
@@ -139,50 +146,44 @@ For any multi-segment video or independently produced narration, read
 [`guides/composition.md`](guides/composition.md) before rendering to
 settle shared technical delivery settings and transitions.
 
-## Required Blender render-mode confirmation
+## Select and retain the Blender render mode
 
-Before starting any Blender render, determine whether the user wants a local
-EEVEE test/preview or a Runpod Pod Cycles production render. If the
-request does not explicitly identify the mode, pause and ask one concise
-question before running a render command:
+Use the current request, earlier user choices, project configuration, and resource
+budget to select the mode. Retain that choice for related iterations without
+reconfirming it. `Cycles` or `GPU` specifies a renderer/device preference, not
+automatically a paid remote job.
 
-> 이번 Blender 렌더는 (1) 로컬 EEVEE 테스트/프리뷰로 실행할까요, 아니면
-> (2) Runpod Pod Cycles 제작 렌더로 실행할까요?
+- **Local iteration:** use `visual-blender-preview` for inexpensive EEVEE frames
+  and short ranges. Use bounded low-sample local Cycles tests when transmission,
+  SSS, volumes, or another feature needs the production renderer. An unspecified
+  diagnostic preview can start locally without a mode question.
+- **Production:** Runpod Pod Cycles is the default for substantial workloads.
+  Local Cycles or EEVEE output is also valid when it meets the requested finish
+  within the local budget. Do not downgrade a requested final to preview quality.
+- **Remote execution:** use `visual-runpod-prepare` → `visual-runpod submit`
+  with R2. One Pod maps to one GPU/Blender process and the requested frame range.
+  Keep submissions within the user's existing cost/resource authorization.
+  Explain Runpod cost and show the live progress command before or alongside
+  submission. Ask only for a material new cost/scope decision not already covered;
+  complete bundle preparation and independent local work first.
 
-Do not infer the mode from the presence of a Blender scene, a `--workers`
-option, or a previous command. Do not start an expensive render while waiting
-for the answer. A request that explicitly says `preview`, `test`, `local`, or
-`EEVEE` selects the local path; a request that explicitly says `production`,
-`Cycles`, `GPU`, or `Runpod` selects the Runpod path.
+If both local validation and remote production are already requested and
+authorized, validate locally and proceed to the remote render without an
+additional transition approval. Revisit the choice only for a concrete failure,
+quality mismatch, or budget change.
 
-Once the mode is selected, state the choice briefly before execution and keep
-the paths separate:
+For multiple local workers, write PNGs and reports to `/private/tmp` or another
+explicitly local scratch path, not an iCloud-synchronized project directory.
+Render mode is not evidence of quality; inspect the resulting frames.
 
-- **Local EEVEE test/preview:** use `visual-blender-preview` for a frame or a
-  small diagnostic range. If multiple local workers are required, write PNGs
-  and reports to `/private/tmp` (or another explicitly local scratch path),
-  never to an iCloud-synchronized project directory. This path is for
-  validation and framing, not final production quality.
-- **Runpod Pod Cycles production:** use
-  `visual-runpod-prepare` → `visual-runpod submit` and the configured R2
-  storage flow. Do not substitute local `parallel_blender_render.py`; one
-  Pod maps to one remote GPU/Blender process and owns the complete requested
-  frame range. Tell the user that the job incurs Runpod usage cost and show the
-  live progress command before or alongside submission.
+## Local Blender iteration and remote production
 
-If the user asks for both, run the local EEVEE validation first, report its
-result, and request or confirm the transition to the Runpod production render
-before submitting the paid job.
+Use local Blender for scene authoring, short render tests, and suitable bounded
+production jobs. Use a **Runpod Pod** (`visual-runpod-prepare` →
+`visual-runpod submit`) for substantial Cycles sequences within the selected
+budget. Asset portability validation runs in the remote worker by default.
 
-## Blender renders via Runpod Pod; EEVEE for local preview
-
-All Blender production rendering and Cycles image-sequence workloads are executed
-remotely via a **Runpod Pod** (`visual-runpod-prepare` →
-`visual-runpod submit`). Local Blender is used for scene authoring and rapid
-composition/framing validation with lightweight EEVEE previews. Asset
-portability validation runs in the worker by default.
-
-Local preview workflow (explicitly selected local mode only):
+Local preview example:
 
 ```sh
 visual-blender-preview --scene-script scenes/hero.py \
@@ -197,11 +198,11 @@ scratch directory, especially when the project is inside iCloud Drive. Read
 [`guides/blender.md`](guides/blender.md) for scene preparation, portable
 assets, and local preview commands.
 
-## Runpod Pod for all Blender production rendering
+## Runpod Pod production workflow
 
 Manim, ordinary PyGfx, Taichi simulations, EEVEE previews, and final FFmpeg
-composition stay local by default. **Blender Cycles production rendering is
-routed to a Runpod Pod.**
+composition stay local by default. Use this workflow when Runpod is selected
+for Blender Cycles production rendering.
 
 Prepare a portable Blender bundle locally:
 

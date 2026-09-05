@@ -2,15 +2,20 @@
 
 Use Manim as a programmatic motion graphics and kinetic typography engine for modern, fast-paced explainers, YouTube educational videos, and high-impact short-form content (Shorts, Reels, TikTok).
 
+This is an optional technique library for a requested kinetic style. Select
+techniques per scene; durations, easing curves, zoom factors, and sound cues below
+are examples, not quality gates. Long holds, linear motion, static captions, and
+silence remain valid when they serve the brief.
+
 Do not treat Manim as merely a math formula or coordinate graph plotter. It is a full procedural 2D/2.5D animation suite capable of spring-damper physics, elastic arrivals, optical camera moves, and millisecond-accurate audio/SFX synchronization.
 
 ---
 
-## 1. Pacing & The 3.5-Second Rule
+## 1. Pacing & Micro-Beat Options
 
 In modern dynamic explainers and short-form content:
-- **Maximum hold time**: Never hold an unchanging composition or static graphic for more than 3.0–3.5 seconds.
-- **Beat subdivision**: Break each informational claim or sentence into 2–4 micro-beats:
+- **Example rhythm**: Holds around 3.0–3.5 seconds can suit a fast sequence; use longer or shorter holds for reading, observation, or dramatic effect.
+- **Optional beat subdivision**: A sentence can use selected parts of this pattern:
   1. *Impactor / Entrance*: Sudden kinetic arrival of the anchor element (0.2s–0.4s).
   2. *Secondary Reveal / Accent*: Branching arrows, data counter, or word highlight (0.4s–0.8s).
   3. *Camera / Focus Shift*: Snap punch-in or camera pan to the critical detail (0.2s–0.3s).
@@ -20,10 +25,12 @@ In modern dynamic explainers and short-form content:
 
 ## 2. Kinetic Elasticity & Rate Functions
 
-Robotic linear motion destroys audience immersion. Apply physical momentum and elastic recoil to all entering cards, callout badges, and numbers.
+Choose easing for the intended gesture. Elastic recoil can give cards and badges
+a playful or punchy arrival; linear or non-overshooting easing can suit precision,
+restraint, or continuous movement. Do not add bounce to every graphic by default.
 
 ### Key Rate Functions
-- `rate_func=rate_functions.ease_out_back`: **The essential modern "punchy" arrival.** Overshoots the target by 10% and snaps back with tactile recoil.
+- `rate_func=rate_functions.ease_out_back`: An overshooting arrival for a punchy gesture; tune its visible amplitude to the object and composition.
 - `rate_func=rate_functions.ease_out_elastic`: Spring bounce for playful, attention-grabbing badges or icons.
 - `rate_func=rate_functions.rush_into`: High-velocity acceleration into a collision or sudden stop.
 - `rate_func=rate_functions.there_and_back`: Quick pulse or heartbeat emphasis.
@@ -47,7 +54,9 @@ self.play(
 
 ## 3. Kinetic Typography & Word-by-Word Emphasis
 
-Do not render long static blocks of text. Sync word entrances with voiceover delivery.
+Use word entrances or emphasis synchronized with narration when they improve
+hierarchy. Static text and conventional caption bars are useful for sustained
+reading and accessibility; choose their timing from the content.
 
 ### Patterns
 - **Word Pop-in**: Animate words individually or in short clusters (2–3 words) matching the spoken rhythm.
@@ -92,7 +101,7 @@ self.play(
 
 ## 5. Dynamic Camera Moves: Snap Zooms & Whip Pans
 
-Use `MovingCameraScene` to break out of flat 2D stillness:
+Use `MovingCameraScene` when a zoom or pan contributes to the selected treatment:
 
 ```python
 class DynamicExplainerBeat(MovingCameraScene):
@@ -139,9 +148,11 @@ When combining 3D realism (Blender/PyGfx) with Manim kinetic typography:
 
 ## 7. Frame-Accurate SFX Mapping Table
 
-Never release a dynamic motion sequence without matching audio hits:
+Choose sound cues at meaningful accents; omit them where narration, ambience, or
+silence carries the moment. For selected impact sounds, align perceptually with
+the action and check at playback speed. The examples below are optional:
 
-| Visual Event | Target Duration | Easing Curve | Essential SFX Pairing |
+| Visual Event | Example Duration | Easing Curve | Optional SFX Pairing |
 |---|---|---|---|
 | Card / Badge Arrival | 0.25s–0.35s | `ease_out_back` | Crisp Pop / Tactile Mechanical Click |
 | Snap Zoom / Punch-in | 0.18s–0.25s | `ease_out_expo` | Air displacement Whoosh / Camera Zoom Servo |

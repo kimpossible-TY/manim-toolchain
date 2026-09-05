@@ -1,4 +1,4 @@
 interface:
   display_name: "Visual Explainer Toolchain"
   short_description: "Create clear explanatory visuals and videos"
-  default_prompt: "Use $visual-explainer-toolchain to create a clear visual explainer with the lightest suitable renderer."
+  default_prompt: "Use $visual-explainer-toolchain to create a visual explainer matching my creative direction, using suitable engines and a practical production budget."
