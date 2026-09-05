@@ -1,1 +1,1 @@
-"""Runpod Serverless Blender worker package."""
+"""Runpod Pod Blender worker package."""

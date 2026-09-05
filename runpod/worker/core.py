@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run one isolated Blender/Cycles chunk inside a Runpod worker."""
+"""Run one isolated Blender/Cycles render range inside a Runpod Pod."""
 
 from __future__ import annotations
 
@@ -128,7 +128,7 @@ def _with_compute_device(command: list[str], device: str) -> list[str]:
 def _clear_partial_render_output(output: Path) -> None:
     """Remove only render artifacts before a clean backend retry.
 
-    Keep the first-chunk asset validation report: it is produced before the
+    Keep the asset-validation report: it is produced before the
     render attempt and remains useful in the successful output archive.
     """
 
@@ -146,13 +146,13 @@ def _load_render_report(report_path: Path) -> dict[str, object]:
     """Turn missing/corrupt Blender output into a meaningful worker failure."""
 
     if not report_path.is_file():
-        raise RuntimeError("Cycles chunk render exited without render_report.json")
+        raise RuntimeError("Cycles Pod render exited without render_report.json")
     try:
         report = json.loads(report_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise RuntimeError("Cycles chunk render produced an invalid render_report.json") from exc
+        raise RuntimeError("Cycles Pod render produced an invalid render_report.json") from exc
     if not isinstance(report, dict):
-        raise RuntimeError("Cycles chunk render report must be a JSON object")
+        raise RuntimeError("Cycles Pod render report must be a JSON object")
     return report
 
 
@@ -356,8 +356,8 @@ def _manifest_and_chunk(event_input: dict[str, object], bundle: Path) -> tuple[d
     import runpod_job_utils
 
     manifest = runpod_job_utils.load_manifest(bundle)
-    if manifest.get("backend") != "runpod-serverless":
-        raise ValueError("bundle backend must be runpod-serverless")
+    if manifest.get("backend") != "runpod-pod":
+        raise ValueError("bundle backend must be runpod-pod")
     if manifest.get("render_engine") != "CYCLES":
         raise ValueError("Runpod worker only accepts CYCLES bundles")
     for path in bundle.rglob("*"):
@@ -425,7 +425,7 @@ def _progress_event(chunk_id: str, phase: str, **fields: object) -> dict[str, ob
 
 
 def handle_event(event: dict[str, object]) -> Iterator[dict[str, object]]:
-    """Runpod handler entry point; accepts a job object or its input object."""
+    """Run one Pod render event and yield bounded progress/result records."""
 
     event_input = event.get("input", event)
     if not isinstance(event_input, dict):
@@ -510,8 +510,8 @@ def handle_event(event: dict[str, object]) -> Iterator[dict[str, object]]:
             frames_total=frame_end - frame_start + 1,
             percent=0.0,
         )
-        # One request owns one GPU and one Blender process. Horizontal chunking
-        # is the responsibility of the client/orchestrator.
+        # One Pod owns one GPU and one Blender process for its complete range.
+        # Do not fan out competing Blender subprocesses inside the Pod.
         requested_device = str(manifest.get("requested_compute_device", "auto"))
         command = common + [
             "--mode",
@@ -549,7 +549,7 @@ def handle_event(event: dict[str, object]) -> Iterator[dict[str, object]]:
             yield from _run_with_progress(
                 command,
                 cwd=bundle,
-                label="Cycles chunk render",
+                label="Cycles Pod render",
                 output=output,
                 frame_start=frame_start,
                 frame_end=frame_end,
@@ -565,7 +565,7 @@ def handle_event(event: dict[str, object]) -> Iterator[dict[str, object]]:
             yield _progress_event(
                 chunk_id,
                 "render",
-                message="OptiX kernel initialization failed; retrying this chunk with CUDA",
+                message="OptiX kernel initialization failed; retrying this Pod render with CUDA",
                 frame_start=frame_start,
                 frame_end=frame_end,
                 frames_completed=0,
@@ -576,7 +576,7 @@ def handle_event(event: dict[str, object]) -> Iterator[dict[str, object]]:
             yield from _run_with_progress(
                 _with_compute_device(command, "cuda"),
                 cwd=bundle,
-                label="Cycles chunk render (CUDA fallback)",
+                label="Cycles Pod render (CUDA fallback)",
                 output=output,
                 frame_start=frame_start,
                 frame_end=frame_end,

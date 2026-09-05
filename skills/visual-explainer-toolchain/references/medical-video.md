@@ -2,13 +2,11 @@
 
 Read this reference before writing or storyboarding a medical, clinical
 procedure, vaccine, pharmaceutical, or healthcare-marketing video. Its purpose
-is to lower uncertainty and support an informed consultation, not to create
-fear, promise an outcome, or pressure a patient into a decision.
+is to provide clear, high-impact scientific visualization and support informed
+consultation.
 
-This is a direction and production-safety guide, not medical, legal, or
-advertising approval. The jurisdiction, publishing channel, intended audience,
-clinical indication, and whether a product or procedure is named all affect the
-final review requirements.
+This is a direction and production guide. Final regulatory compliance, tone
+moderation, and clinical review are managed by the user during final inspection.
 
 ## Required claim and release gates
 
@@ -37,38 +35,32 @@ consultation, screening, or follow-up is unnecessary. Do not invent efficacy
 figures, target ages, dosing schedules, contraindications, recovery times, or
 adverse-effect claims.
 
-## Patient-education cinematic style
+## Medical explainer cinematic style
 
-The intended feeling is calm agency: “I understand what will be discussed and
-can make an informed decision.” Use a clean medical 3D cross-section, a calm
-clinician explanation, and compact information cards. Borrow a camera move
-into an internal process only when it reveals something the viewer cannot see;
-do not borrow fear, shock, countdown pressure, or a dramatic reversal as the
-main hook.
+Deliver high-impact visual storytelling, dynamic camera choreography, and
+physically credible 3D biomedical visualization. Use cinematic 3D cross-sections,
+depth-staged micro/macro environments, dynamic camera fly-throughs, and crisp
+motion graphics.
 
-Use warm-neutral lighting, restrained motion, inclusive casting, and plain
-language. Treat sensitive subjects without stigma. Let one idea settle before
-introducing the next. Avoid an exam-prep density of labels or a photorealistic
-medical image when a clear abstraction explains the same idea.
+Do not artificially suppress camera dynamics, dramatic tension, high-contrast
+lighting, or realistic physiological interactions during the creative rendering
+stage. The visual pipeline should maximize immersion, spatial depth, and
+explanatory impact. Tone moderation and regulatory audience suitability are
+handled by the user during final review.
 
 ### Visual routing
 
 | Beat | Preferred treatment |
 | --- | --- |
-| A question, eligibility check, visit timeline, consent, aftercare, or summary | Manim cards, icons, simple diagrams, or calm live-action support |
-| An internal structure, mechanism, or treatment location | Clean, simplified 3D cross-section in PyGfx or a short Blender shot |
-| A complex biological process that needs spatial depth | PyGfx; use Blender only if material, lighting, or anatomy visibly improves comprehension |
-| Consultation, examination, procedure, and follow-up journey | A human-centered timeline, short clinician explanation, or neutral symbolic scenes |
+| A question, eligibility check, visit timeline, consent, aftercare, or summary | Dynamic Manim cards, animated icons, or sleek motion graphics |
+| An internal structure, cellular mechanism, or treatment location | High-fidelity 3D cross-section or cinematic Blender shot with dynamic camera |
+| A complex biological process that needs spatial depth | Rich PyGfx or Blender scene with depth of field, SSS shaders, and particle systems |
+| Consultation, examination, procedure, and follow-up journey | Engaging timeline, stylized 3D human figures, or technical procedure animatics |
 
-Use Blender for internal-anatomy shots when its form, depth, material, lighting,
-or camera movement materially improves comprehension. The amount and duration
-of Blender footage are determined by the storyboard and the visible benefit of
-each shot, not by a fixed time quota. Default to no needle penetration, live
-procedure, gore, or distressing close-up. Use an arm silhouette, a gentle
-location highlight, a simplified instrument diagram, a consultation scene, or
-post-visit observation when those communicate the idea more clearly. Any
-invasive or otherwise exceptional treatment requires explicit clinical,
-consent, privacy, and advertising review.
+Use Blender freely for internal-anatomy, tissue, and cellular shots whenever its
+lighting, subsurface scattering, volumetrics, camera dynamics, and physical
+interactions elevate the visual quality. Model anatomical structures, microscopic
+pathogens, and immune mechanisms with tangible fidelity and purposeful motion.
 
 ## Narrative templates
 
@@ -79,12 +71,12 @@ video into a disguised sales pitch.
 
 | Time | Visual | Role |
 | --- | --- | --- |
-| 0–5 s | Ordinary life, a parent-and-child moment, or a neutral silhouette | State the consultation question without targeting or shaming anyone. |
-| 5–16 s | Clean skin or mucosal cross-section; a gentle camera move inward | Explain why the relevant process is not visible in daily life. |
-| 16–28 s | Simplified, non-alarmist immune response | Explain the prevention concept at a high level. |
+| 0–5 s | Ordinary life, a parent-and-child moment, or a neutral silhouette | State the consultation question clearly and engagingly. |
+| 5–16 s | Macro-to-micro fly-through into tissue cross-section | Dynamic camera move into the cellular/mucosal environment. |
+| 16–28 s | Dynamic 3D immune response & mechanism | Visually demonstrate the interaction between antibodies and pathogens. |
 | 28–40 s | Cards and calendar | Show the factors a clinician checks: age, prior history, and health context. Do not supply unreviewed criteria or schedules. |
-| 40–50 s | Consultation, screening, administration, and observation represented as icons or brief calm footage | Reduce uncertainty about the visit rather than displaying an invasive moment. |
-| 50–60 s | Neutral end card | Invite a consultation about individual suitability and timing; use only a reviewed CTA. |
+| 40–50 s | Procedure, administration, or mechanism in action | Clear, visually compelling demonstration of the clinical mechanism. |
+| 50–60 s | Engaging end card | Invite a consultation about individual suitability and timing; use only a reviewed CTA. |
 
 For a branded vaccine such as Gardasil 9, keep the video focused on consultation
 and prevention education. Do not copy claims, statistics, eligibility, or
@@ -133,9 +125,9 @@ be copied verbatim:
 | [Mayo Clinic Minute — HPV vaccine](https://www.youtube.com/watch?v=TQkZ97bKqoY) | A brief clinician explanation tied to a next step | Presenting a clinician’s authority as an outcome guarantee |
 | [KDCA 아프지마TV — HPV](https://www.youtube.com/watch?v=_XFRZXLmMys) | Inclusive, non-stigmatizing Korean public-health tone | Copying public-campaign pacing or recommendations without adaptation |
 
-The desired combination is clean 3D anatomy, calm clinical trust, and concise
-information structure. If a reveal-style camera move is used, it should only
-make the internal cause or mechanism legible.
+The desired combination is high-impact 3D anatomy, cinematic visual pacing, and
+crisp information hierarchy. Utilize dynamic camera reveals, macro-to-micro
+transitions, and rich lighting to make internal mechanisms captivating and legible.
 
 ## Korean review inputs
 

@@ -1,36 +1,42 @@
-# Runpod Serverless Blender/Cycles workflow
+# Runpod Pod Blender/Cycles workflow
 
-Runpod is the production backend for Blender Cycles image sequences in this
-toolchain. Local macOS rendering remains useful for EEVEE composition previews,
-but the final image sequence is rendered by a Linux GPU worker.
+Runpod Pods are the production backend for Blender Cycles image sequences in
+this toolchain. Local macOS rendering remains useful for EEVEE composition
+previews, while one disposable Linux GPU Pod renders one complete production
+frame range.
 
-## Components
+## Components and ownership
 
 ```text
 video repository
   -> visual-runpod-prepare
-  -> portable bundle + render_manifest.json
-  -> object storage (signed GET/PUT URLs)
+  -> portable bundle + runpod-pod render_manifest.json
+  -> Cloudflare R2 input archive
   -> visual-runpod submit
-  -> Runpod endpoint queue
-  -> one worker/GPU/Blender process per chunk
-  -> signed output archives
-  -> visual-runpod download
-  -> local PNG verification + FFmpeg composition
+  -> one Runpod Pod / one GPU / one Blender process
+  -> R2 status object + output archive
+  -> visual-runpod download -> local PNG verification + FFmpeg composition
+  -> Pod deletion
 ```
 
-The local project does not install the Runpod SDK. `scripts/runpod_client.py`
-uses the standard-library HTTPS client for the endpoint API; the worker image
-installs `runpod` only for its handler adapter. `RUNPOD_API_KEY` and
-`RUNPOD_ENDPOINT_ID` are environment variables, never manifest fields.
+`visual-runpod` uses `runpodctl` to create, inspect, and delete Pods. It does
+not use a Serverless endpoint or the Runpod Python SDK. Export `RUNPOD_API_KEY`
+in the shell that launches the command; the client never reads or writes a
+Runpod key from a config file. Pod placement settings and R2 credentials are
+environment variables only; they are never copied into a bundle or manifest.
+
+The Pod is created after the input archive is already available in R2. Its
+environment contains only the one-time input URL, output/status PUT URLs, and
+the render event. The worker publishes progress and the final result to R2;
+the local process consequently remains restartable while the Pod runs.
 
 ## Cloudflare R2 storage
 
 The recommended storage path is a private Cloudflare R2 Standard bucket. R2 is
-S3-compatible, so the client creates short-lived GET/PUT presigned URLs without
-putting R2 credentials in Runpod jobs or bundles. Create a bucket-scoped R2 API
-token with Object Read & Write permission, then configure the protected central
-`.env` with mode `600`:
+S3-compatible, so the local client makes short-lived presigned URLs without
+putting R2 credentials in the Pod or the jobs file. Create a bucket-scoped R2
+API token with Object Read & Write permission, then configure the protected
+central `.env` with mode `600`:
 
 ```sh
 R2_ACCOUNT_ID=...
@@ -41,11 +47,43 @@ R2_PREFIX=manim-render                 # optional
 R2_URL_EXPIRY_SECONDS=86400             # optional; max 604800
 ```
 
-`R2_ENDPOINT_URL` may be used instead of `R2_ACCOUNT_ID` when the endpoint is
-already known. `visual-runpod` is the only wrapper that loads this credential
-set; generic visualization and Blender wrappers scrub it from child processes.
-Never put these values in a bundle, jobs file, or Git repository. Use the R2 S3
-API endpoint for presigned URLs, not a custom domain.
+`R2_ENDPOINT_URL` may be used instead of `R2_ACCOUNT_ID` when the S3 API
+endpoint is already known. `visual-runpod` is the only wrapper that loads this
+credential set; generic visualization and Blender wrappers scrub it from child
+processes. Never put these values in a bundle, jobs file, or Git repository.
+Use the R2 S3 API endpoint for presigned URLs, not a custom domain.
+
+The Pod needs no cloud credential to call R2: the client passes only presigned
+URLs. The status object remains useful if the local terminal disconnects.
+
+## Pod configuration
+
+Install `runpodctl` and authenticate it with the same Runpod account as the API
+key. The command must be discoverable on `PATH`, or configure `RUNPODCTL_BIN`.
+Set the image by immutable digest whenever practical and use the exact Runpod
+GPU type ID accepted by `runpodctl pod create`:
+
+```sh
+RUNPOD_API_KEY=...
+RUNPOD_POD_IMAGE=ghcr.io/kimpossible-ty/manim-blender-worker@sha256:3d33302c2c79371832cf320514c2b8a112b0a435a92b22af7779bbadb9acec78
+RUNPOD_POD_GPU_ID=replace-with-runpod-gpu-id
+RUNPOD_POD_CONTAINER_DISK_GB=30       # optional; default 30
+RUNPOD_POD_TERMINATE_AFTER=8h          # local wait/cost budget; default 8h
+# Optional affinity and private-image registry access:
+# RUNPOD_POD_DATA_CENTER_IDS=EU-RO-1,US-KS-2
+# RUNPOD_REGISTRY_AUTH_ID=...
+```
+
+`RUNPOD_POD_TERMINATE_AFTER` accepts a duration such as `8h`, `45m`, or `1d`.
+The client probes the installed `runpodctl`: newer versions may pass a
+create-time termination flag, while the current v2.12 command surface does
+not expose one. In that case the value is the local monitor's maximum wait
+budget; `visual-runpod status`, `visual-runpod wait`, and
+`visual-runpod progress` delete the Pod automatically on a terminal result,
+and a bounded wait timeout also deletes it. Use `--keep-pod` only while
+diagnosing a failure. Use the explicit, confirmation-gated `terminate`
+command to stop a non-terminal Pod. For unattended runs, also enforce an
+account spend limit because a hard local process failure cannot run cleanup.
 
 ## Prepare the bundle
 
@@ -53,12 +91,11 @@ API endpoint for presigned URLs, not a custom domain.
 visual-runpod-prepare \
   --scene scene.blend --scene-script scenes/hero.py --asset-dir assets \
   --output render-job --width 1920 --height 1080 --fps 30 \
-  --frame-start 1 --frame-end 240 --chunk-size 60 \
-  --samples 128 --device auto
+  --frame-start 1 --frame-end 240 --samples 128 --device auto
 
 visual-runpod-prepare --scene scene.blend --output render-job \
   --width 960 --height 540 --fps 24 --frame-start 1 --frame-end 24 \
-  --chunk-size 24 --samples 32 --device auto --validate-source
+  --samples 32 --device auto --validate-source
 ```
 
 `--asset-dir` copies directory contents, but it does not infer files imported
@@ -74,35 +111,29 @@ visual-runpod-prepare \
 ```
 
 Run `verify_runpod_render_job.py` before submission; missing wrapper
-dependencies should fail locally rather than during worker asset validation.
-
-The default is `--require-gpu`: a completed worker report must say
+dependencies should fail locally rather than during Pod asset validation. The
+default is `--require-gpu`: a completed worker report must say
 `render_device=GPU`. Use `--no-require-gpu` only for an intentional CPU
-diagnostic. Local source validation is opt-in because final portability
-validation happens in the worker; it is also useful when a source `.blend`
-contains an absolute or missing asset path.
-
-## GPU backend compatibility gate
-
-Device enumeration is not sufficient evidence that Cycles can render on a
-particular worker. Before sending a multi-chunk production batch to a new or
-heterogeneous endpoint, submit a one-frame Cycles probe and retain its report
-with the selected `compute_backend` and GPU model. For `auto` or `gpu`, the
-worker retries a recognized `OPTIX_ERROR_INTERNAL_COMPILER_ERROR` or
-unimplemented PTX intrinsic once with CUDA in a fresh Blender process; the
-report records that fallback. An explicit `--device optix` remains strict. Do
-not scale a batch until the fallback or an explicit `--device cuda` probe passes,
-or route the batch to a known-compatible pinned GPU pool.
-
-Treat an API status of `COMPLETED` as render success only when the worker result
-also supplies a valid output archive digest. A completed status without a result
-can be an eventual-consistency state or a subsequently corrected failure, and
-must remain pending or fail explicitly rather than trigger download/composition.
+diagnostic.
 
 The bundle contains `scene.blend`, an optional `scene.py`, explicitly selected
 assets, the Blender runner, and the frame verifier. It does not include the
-repository, credentials, browser data, or a local output sequence. Asset paths
-must be Blender-relative (`//...`) or packed for remote portability.
+repository, credentials, browser data, or local output. Asset paths must be
+Blender-relative (`//...`) or packed for remote portability.
+
+## GPU compatibility gate
+
+Device enumeration alone is not evidence that Cycles can render on a particular
+GPU image. Before sending a long production range to a new GPU type, submit a
+one-frame Cycles probe and retain its report with `compute_backend` and GPU
+model. For `auto` or `gpu`, the worker retries a recognised OptiX/PTX compiler
+failure once with CUDA in a fresh Blender process; an explicit `--device optix`
+remains strict. Do not scale the range until the probe passes with the selected
+GPU type.
+
+Treat a `COMPLETED` status as render success only when the final status has a
+valid output archive digest. A Pod that exits before writing status is a
+failure, not an implicit completed render.
 
 ## Build the worker image
 
@@ -111,120 +142,85 @@ docker build --platform linux/amd64 \
   -f runpod/Dockerfile \
   --build-arg BLENDER_VERSION=5.2.1 \
   --build-arg BLENDER_SHA256=a31f524fa99a527d3d52b7f5aaa68c34e1a19d5a1c9473f79c5cc610fd5b10e9 \
-  -t ghcr.io/ORG/manim-blender-worker:5.2.1 .
-docker push ghcr.io/ORG/manim-blender-worker:5.2.1
+  -t ghcr.io/kimpossible-ty/manim-blender-worker:5.2.1-pod-slim-py310.20260903 .
+docker push ghcr.io/kimpossible-ty/manim-blender-worker:5.2.1-pod-slim-py310.20260903
 ```
 
-Select this image in a queue-based Runpod Serverless endpoint. Start with zero
-or a small active-worker floor and cap maximum workers to the available GPU
-budget. A queue endpoint fits batch frame work: the client creates independent
-chunk jobs and the endpoint schedules them. The image uses a digest-pinned CUDA
-base, Blender 5.2.1 with a required official SHA-256, and a pinned Runpod SDK.
-Update the Blender version and matching hash deliberately, then deploy the
-pushed image by immutable digest rather than a mutable tag.
+The image has a digest-pinned CUDA base and Blender 5.2.1 with a required
+official SHA-256. It starts `pod_start.sh`, which runs the Pod event runner;
+the runner executes one Blender process for the full requested range, uploads
+the archive, and exits. Update the Blender version and matching hash
+deliberately, then set `RUNPOD_POD_IMAGE` to the pushed digest.
 
-## Submit and orchestrate chunks
+The image uses the CUDA **base** image rather than the larger CUDA runtime
+variant. This keeps disposable-Pod pull time and storage lower while retaining
+the CUDA/OptiX libraries Blender needs. The worker is tested against the
+Python 3.10 interpreter shipped by Ubuntu 22.04; code that runs inside the Pod
+must use `datetime.timezone.utc` rather than the Python 3.11-only
+`datetime.UTC` API.
 
-The simplest path uses the built-in R2 mode. It uploads the archived bundle,
-creates one input GET URL, and creates distinct output PUT/GET URLs for every
-chunk automatically:
+## Submit, monitor, download, and clean up
+
+The standard R2 path archives the bundle once, uploads it once, creates one
+input GET URL, and creates output/status PUT and GET URLs for the Pod:
 
 ```sh
-# Put RUNPOD_API_KEY and RUNPOD_ENDPOINT_ID in the protected central .env.
+visual-runpod submit --bundle render-job --r2
 
-visual-runpod submit --bundle render-job --r2 \
-  --execution-timeout-ms 3600000 --ttl-ms 86400000
-
-# Follow live phase/frame progress and download when complete:
+# Report R2-backed phase/frame progress; delete the terminal Pod automatically.
 visual-runpod progress --jobs-file render-job.runpod.json --download
 
-# Retry terminally failed chunks with fresh R2 URLs:
-visual-runpod retry --jobs-file render-job.runpod.json
+# The same operation without progress lines:
+visual-runpod wait --jobs-file render-job.runpod.json --download
 
-# Delete only this batch's R2 input/output objects after local verification:
+# Inspect, retry as a new Pod, or stop the current Pod explicitly:
+visual-runpod status --jobs-file render-job.runpod.json
+visual-runpod retry --jobs-file render-job.runpod.json
+visual-runpod terminate --jobs-file render-job.runpod.json --confirm
+
+# After retaining verified local output, delete this batch's R2 objects:
 visual-runpod cleanup --jobs-file render-job.runpod.json --confirm
 ```
 
-The generated object layout is `R2_PREFIX/<batch-id>/input.tar.gz` and
-`R2_PREFIX/<batch-id>/chunks/<chunk-id>.tar.gz`. Configure an R2 lifecycle rule
-to delete old job prefixes after the retention period.
+The R2 object layout is `R2_PREFIX/<batch-id>/input.tar.gz`,
+`R2_PREFIX/<batch-id>/output.tar.gz`, and
+`R2_PREFIX/<batch-id>/status.json`. Configure an R2 lifecycle rule to delete
+old job prefixes after the chosen retention period.
 
-The client also supports manually supplied signed HTTPS URLs when another
-storage provider is required. It can upload the archive through a signed PUT
-URL, and each output chunk needs a distinct object key. For multiple chunks,
-use a URL template or a URL map:
+`download` verifies the archive digest and exact frame range, then writes
+`output/render_report.json`. Only after local verification should the frames
+be passed to FFmpeg. The jobs file contains presigned URLs and Pod metadata,
+has mode `0600`, and must not be committed. The API key itself is never written
+to it.
 
-```sh
-# Put RUNPOD_API_KEY and RUNPOD_ENDPOINT_ID in the protected central .env.
-
-visual-runpod submit --bundle render-job \
-  --input-url 'https://storage.example/input/render-job.tar.gz' \
-  --input-upload-url 'https://storage.example/input/render-job.tar.gz?...' \
-  --output-upload-url-template 'https://storage.example/output/{chunk_id}.tar.gz?...' \
-  --output-download-url-template 'https://storage.example/output/{chunk_id}.tar.gz?...' \
-  --execution-timeout-ms 3600000 --ttl-ms 86400000
-
-visual-runpod wait --jobs-file render-job.runpod.json --download
-```
-
-When the storage provider uses different signed URLs for upload and download,
-write a JSON map such as:
-
-```json
-{
-  "chunk-0000-000001-000060": {
-    "upload": "https://storage.example/output/chunk-0000.tar.gz?...",
-    "download": "https://storage.example/output/chunk-0000.tar.gz?..."
-  }
-}
-```
-
-Pass it with `--output-url-file`. The jobs file contains signed URLs and is
-ignored by Git; treat it like a secret and delete or rotate URLs after use.
-The API key is never written to that file.
-
-The first chunk requests asset validation. Every chunk then runs one Blender
-process, writes a PNG sequence/report, verifies the exact frame range, uploads
-`output.tar.gz`, and returns its archive digest. The client polls with:
-
-```sh
-visual-runpod status --jobs-file render-job.runpod.json
-visual-runpod wait --jobs-file render-job.runpod.json --poll-seconds 10
-visual-runpod download --jobs-file render-job.runpod.json
-```
-
-`download` verifies each archive digest and frame range, rejects conflicting
-frames, merges all chunks, and writes `output/render_report.json`. Only after
-that local verification should the frames be passed to FFmpeg.
-
-For live progress, use the stream-aware command:
-
-```sh
-visual-runpod progress --jobs-file render-job.runpod.json
-# Equivalent wait mode for scripts:
-visual-runpod wait --jobs-file render-job.runpod.json --stream --download
-```
-
-The worker emits bounded events for download, extraction, asset validation,
-render, verification, and upload. During rendering, completed non-empty PNGs
-provide reliable frame progress even when Blender does not print sample updates.
-If Blender emits Cycles sample statistics, the CLI includes them; signed URLs
-are never printed.
-
-`retry` resubmits only failed R2 chunks and keeps the same verified input
-archive. `cleanup` is explicit and confirmation-gated because presigned URLs
-expiring does not delete the underlying R2 objects.
+The worker Pod is created with SSH disabled (`--ssh=false`) and publishes no
+SSH port. This is intentional: the batch worker receives its event through
+environment variables and R2 presigned URLs, so an SSH endpoint adds attack
+surface without helping the render. For interactive diagnosis, use a separate
+explicitly configured Pod rather than weakening the production worker default.
 
 ## Operational boundaries
 
-- Do not put PNGs or base64 media in the Runpod JSON input/result. Use object
-  storage for archives and return metadata plus signed URLs.
-- Do not call `parallel_blender_render.py` in the worker. Runpod supplies the
-  horizontal fan-out; multiple Blender processes competing for one GPU usually
-  increase memory pressure and reduce predictability.
-- Keep endpoint execution timeout above the slowest expected chunk and set a
-  finite TTL so abandoned jobs do not remain indefinitely.
-- The client does not create an endpoint, configure a GPU type, or upload an
-  image registry credential. Those are deliberate Runpod account/deployment
-  actions.
-- The default documentation and wrappers use Runpod Serverless.
+- One submitted job equals one Pod, one GPU, and one Blender process. The
+  client deliberately does not split the range or create a Pod pool.
+- Do not call `parallel_blender_render.py` inside the Pod. Multiple Blender
+  processes competing for one GPU increase memory pressure and reduce
+  predictability.
+- Size `RUNPOD_POD_CONTAINER_DISK_GB` for the uncompressed bundle, working
+  files, and output range. A Pod disk is not persistent storage; R2 is the
+  durable handoff.
+- `runpodctl pod create` can wait for capacity. The client uses a
+  create-time `--terminate-after` when the installed CLI supports it; current
+  v2.12 builds do not, so unattended runs should add an account spend limit or
+  an external watchdog in addition to the client's terminal/timeout cleanup.
+- The installed CLI is probed at runtime instead of assuming a particular flag
+  set. In particular, `--terminate-after` is absent from current v2.12 help
+  output; the local wait budget is still enforced, and terminal/timeout
+  cleanup is idempotent if a Pod was removed by a user or watchdog.
+- Status is written to R2 with short-lived PUT URLs and can arrive out of order
+  while the output archive is uploading. The client merges progress
+  monotonically, so a late upload status cannot make RenderPulse show fewer
+  completed frames.
+- The CLI does create and delete Pods, but it does not manage account budgets,
+  buy credits, or mutate templates. Select GPU/image settings deliberately in
+  the protected environment configuration.

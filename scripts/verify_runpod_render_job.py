@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the portable input contract for a Runpod Serverless render."""
+"""Validate the portable input contract for a Runpod Pod render."""
 
 from __future__ import annotations
 
@@ -29,15 +29,15 @@ def validate(bundle: Path) -> list[str]:
     for relative in REQUIRED_FILES:
         if not (bundle / relative).is_file():
             errors.append(f"missing required bundle file: {relative}")
-    if manifest.get("backend") != "runpod-serverless":
-        errors.append("render manifest backend must be runpod-serverless")
+    if manifest.get("backend") != "runpod-pod":
+        errors.append("render manifest backend must be runpod-pod")
     if manifest.get("render_engine") != "CYCLES":
         errors.append("Runpod render manifest must use CYCLES")
     render = manifest.get("render")
     if not isinstance(render, dict):
         errors.append("render manifest render must be an object")
     else:
-        for key in ("width", "height", "fps", "frame_end", "samples", "chunk_size"):
+        for key in ("width", "height", "fps", "frame_end", "samples"):
             if not isinstance(render.get(key), int) or render[key] <= 0:
                 errors.append(f"render.{key} must be a positive integer")
         if not isinstance(render.get("frame_start"), int) or render["frame_start"] < 0:
@@ -87,7 +87,7 @@ def main() -> int:
     print(
         "RUNPOD_RENDER_JOB_VALIDATION=PASS "
         f"frames={render['frame_start']}-{render['frame_end']} "
-        f"chunk_size={render['chunk_size']}"
+        "pod=single-gpu"
     )
     return 0
 

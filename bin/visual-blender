@@ -5,6 +5,8 @@ set -euo pipefail
 # deliberately does not activate the central uv environment or load dotenv
 # files; Blender scripts run with Blender's bundled Python.
 unset RUNPOD_API_KEY RUNPOD_ENDPOINT_ID RUNPOD_API_BASE_URL
+unset RUNPOD_POD_IMAGE RUNPOD_POD_GPU_ID RUNPOD_POD_CONTAINER_DISK_GB
+unset RUNPOD_POD_TERMINATE_AFTER RUNPOD_POD_DATA_CENTER_IDS RUNPOD_REGISTRY_AUTH_ID RUNPODCTL_BIN
 unset R2_ACCOUNT_ID R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY
 unset R2_ENDPOINT_URL R2_PREFIX R2_URL_EXPIRY_SECONDS
 if [[ -n "${BLENDER_BIN:-}" ]]; then

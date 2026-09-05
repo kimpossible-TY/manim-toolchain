@@ -15,7 +15,15 @@ unset UV_PROJECT UV_PROJECT_ENVIRONMENT
 unset UV_WORKING_DIR UV_WORKING_DIRECTORY
 unset UV_ENV_FILE UV_NO_ENV_FILE UV_PYTHON
 
-UV_BIN="$(command -v uv)"
+if command -v uv >/dev/null 2>&1; then
+    UV_BIN="$(command -v uv)"
+elif [[ -x /opt/homebrew/bin/uv ]]; then
+    # Finder-launched menu-bar apps commonly have a minimal PATH.
+    UV_BIN="/opt/homebrew/bin/uv"
+else
+    printf 'uv is not available on PATH or at /opt/homebrew/bin/uv.\n' >&2
+    exit 1
+fi
 ENV_ARGS=(--no-env-file)
 if [[ -f "$TOOLCHAIN_DIR/.env" ]]; then
     credential_mode="$(stat -f '%Lp' "$TOOLCHAIN_DIR/.env")"

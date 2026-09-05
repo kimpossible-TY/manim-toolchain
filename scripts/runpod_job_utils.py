@@ -176,14 +176,3 @@ def load_manifest(bundle: Path) -> dict[str, object]:
     if not isinstance(manifest, dict):
         raise ValueError("render_manifest.json must contain an object")
     return manifest
-
-
-def chunk_ranges(frame_start: int, frame_end: int, chunk_size: int) -> list[tuple[int, int]]:
-    if frame_start > frame_end:
-        raise ValueError("frame_start cannot exceed frame_end")
-    if chunk_size <= 0:
-        raise ValueError("chunk_size must be positive")
-    return [
-        (start, min(frame_end, start + chunk_size - 1))
-        for start in range(frame_start, frame_end + 1, chunk_size)
-    ]

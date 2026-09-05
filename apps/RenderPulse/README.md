@@ -27,10 +27,13 @@ RENDER_PULSE_RUNPOD_PATH=/Users/taeyoung/Developer/visual-explainer-toolchain/bi
 
 ## Current scope
 
-- Active work is shown with a rotating gear in the menu bar.
+- The menu-bar label uses a static state glyph; it does not continuously animate
+  while a render is active.
 - Multiple works appear as individual cards in the popover; one can be pinned as
   the menu-bar work.
-- Status refreshes every five seconds through `visual-runpod status --stream --json`.
+- Status refreshes through `visual-runpod status --stream --json` every 6 seconds
+  for active work, every 25 seconds for idle work, and every 30 seconds when no
+  work is registered. Each status command is cancelled after 30 seconds.
 - `visual-runpod wait` and `visual-runpod progress` automatically register a
   Work using the jobs-file's parent directory name; pass `--work-name` to set
   a human-readable title.

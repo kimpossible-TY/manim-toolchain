@@ -38,6 +38,10 @@ final class WorkMonitorStore: ObservableObject {
     }
 
     var pollingInterval: Duration {
+        Self.pollingInterval(for: works)
+    }
+
+    static func pollingInterval(for works: [WorkRuntime]) -> Duration {
         if works.isEmpty {
             return .seconds(30)
         } else if works.contains(where: \.isActive) {

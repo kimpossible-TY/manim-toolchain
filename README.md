@@ -14,7 +14,7 @@
 [![FFmpeg 9.0.1](https://img.shields.io/badge/FFmpeg-9.0.1-007808?logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
 [![SoX 14.4.2](https://img.shields.io/badge/SoX-14.4.2-6B4FBB)](https://sourceforge.net/projects/sox/)
 [![uv 0.12.7](https://img.shields.io/badge/uv-0.12.7-6B4FBB)](https://docs.astral.sh/uv/)
-[![Runpod Serverless](https://img.shields.io/badge/Runpod-Serverless-6B5CFF)](https://docs.runpod.io/serverless/overview)
+[![Runpod Pods](https://img.shields.io/badge/Runpod-Pods-6B5CFF)](https://docs.runpod.io/pods/overview)
 
 This repository is a reusable, command-line environment for explaining ideas through visual stories: mathematical, scientific, technical, medical, product, process, or conceptual. It supports animation, scientific 3D, numerical simulation, selective high-fidelity Blender shots, narration, typesetting, and final FFmpeg composition. Math is a strong use case, not a boundary; video is one output format, not the only purpose. Individual projects keep only their scene code, assets, local configuration, and outputs.
 
@@ -43,7 +43,7 @@ Homebrew owns system-level executables only:
 - `ffmpeg` and its `ffprobe` executable
 - `sox`
 - Blender, normally as a native macOS application or Homebrew cask
-- the Runpod Serverless API, accessed by the dependency-free local submission CLI
+- `runpodctl`, used by the local submission CLI to create, inspect, and delete disposable GPU Pods
 
 Before installing or changing a formula, inspect `brew config`, `brew doctor`, `brew list --versions <formula>`, and the resolved executable path. Do not reinstall a working formula merely to refresh it.
 
@@ -88,7 +88,18 @@ Manim remains the default for clear explanation, notation, vector diagrams, grap
 
 Both wrappers deliberately keep the caller's working directory. They ignore caller uv-project selection, `VIRTUAL_ENV`, `pyproject.toml`, and `.venv`, so relative assets and outputs remain in the video repository while its dependencies remain untouched. They do not use `uv tool install` and do not `cd` into this repository.
 
-`visual-blender` is a transparent call to the installed Blender executable. The preview/render helpers run Blender background mode with Blender's own Python; they never create or alter a caller Python environment. `visual-runpod-prepare` only creates a local bundle. `visual-runpod` submits chunks using either its built-in Cloudflare R2 presigning mode or caller-supplied signed object-storage URLs; it never embeds credentials in a bundle.
+`visual-blender` is a transparent call to the installed Blender executable. The preview/render helpers run Blender background mode with Blender's own Python; they never create or alter a caller Python environment. `visual-runpod-prepare` only creates a local bundle. `visual-runpod` uploads it through its built-in Cloudflare R2 presigning mode, creates one disposable GPU Pod for the complete frame range, and never embeds credentials in a bundle.
+
+### RenderPulse menu-bar monitor
+
+[`apps/RenderPulse`](apps/RenderPulse) is a native macOS menu-bar app for monitoring user-visible RunPod render work. It uses the central `visual-runpod` wrapper rather than reading API credentials itself, and presents each registered work with its name, progress, active workers, warning count, error count, and local ETA. Start its development build with:
+
+```sh
+cd /Users/taeyoung/Developer/visual-explainer-toolchain/apps/RenderPulse
+swift run
+```
+
+Register a work by selecting its `runpod.jobs.json` file, or let `visual-runpod wait` / `visual-runpod progress` register it automatically. The app calls `visual-runpod status --stream --json`, whose JSON response is credential-safe and reports one Pod-backed render at a time. A multi-file Work can be registered explicitly with repeated `--jobs-file` arguments to `visual-runpod register-work`.
 
 On macOS, local Blender wrappers must be launched with host/outside-sandbox execution permission. Blender 5.x initializes Metal before Python even in background mode, and a restricted runner can hide the device identity needed by Blender's backend probe. The `visual-blender` wrapper detects that condition and exits with status 77 and an actionable message instead of allowing Blender 5.2 to crash before the scene script starts. This is a permission on the parent runner, not a Blender flag; `--background`, `--factory-startup`, and `--gpu-backend opengl` do not solve it.
 
@@ -113,12 +124,16 @@ A video repository may override it with a local `manim.cfg`.
 
 ## Codex skills
 
-The repository owns two tracked skills:
+The repository owns the tracked visualization skill:
 
 - `skills/visual-explainer-toolchain` routes and verifies the shared explanation visualization workflow.
-- `skills/publish-typst-supplement` publishes large generated supplements as versioned GitHub Release assets.
 
-Codex discovers them through symlinks in `~/.codex/skills`. Keep the repository copies authoritative. For non-trivial Typst scene authoring, pair `visual-explainer-toolchain` with the separately maintained [`my-typst-style`](https://github.com/kimpossible-TY/typst-packages/tree/main/skills/my-typst-style) skill.
+The reusable `publish-typst-supplement` skill is maintained separately at
+`~/Developer/codex-skills/publish-typst-supplement`. Codex discovers both skills
+through symlinks in `~/.codex/skills`. Keep the visualization skill's repository
+copy authoritative. For non-trivial Typst scene authoring, pair
+`visual-explainer-toolchain` with the separately maintained
+[`my-typst-style`](https://github.com/kimpossible-TY/typst-packages/tree/main/skills/my-typst-style) skill.
 
 ## Use from another video repository
 
@@ -185,11 +200,11 @@ visual-python /Users/taeyoung/Developer/visual-explainer-toolchain/scenes/taichi
   --arch cpu --numerical-only
 ```
 
-## Blender escalation and Runpod Serverless rendering
+## Blender escalation and disposable Runpod Pod rendering
 
 Blender is a conditional high-fidelity renderer, not the default 3D engine. Use it for a realistic translucent bladder, a product/anatomical model, complex shadows, depth of field, volumetrics, rigging, imported assets, or another shot where PyGfx cannot communicate the result efficiently. A rotating cube, triangulated sphere, or wave surface normally belongs in Manim, PyGfx, or Taichi + PyGfx.
 
-All Blender production renders and Cycles image-sequence batches are executed remotely via **Runpod Serverless**. Local Blender is used for scene authoring and rapid composition/framing validation with lightweight EEVEE previews. Asset portability is checked in the worker by default, so a local Blender validation pass is optional.
+All Blender production renders and Cycles image-sequence batches are executed remotely in a **disposable Runpod Pod**. Local Blender is used for scene authoring and rapid composition/framing validation with lightweight EEVEE previews. Asset portability is checked in the Pod worker by default, so a local Blender validation pass is optional.
 
 Author reproducible scenes with regular Blender Python. Start with a local EEVEE background preview; the defaults are configurable through `VISUAL_BLENDER_PREVIEW_WIDTH`, `VISUAL_BLENDER_PREVIEW_HEIGHT`, `VISUAL_BLENDER_PREVIEW_SAMPLES`, and `VISUAL_BLENDER_PREVIEW_SCALE` and do not save over the source `.blend`:
 
@@ -198,28 +213,30 @@ visual-blender-preview --scene-script scenes/anatomy.py \
   --output media/previews/anatomy.png --width 1280 --height 720 --frame 1
 ```
 
-For production rendering, prepare a portable bundle and submit independent frame chunks:
+For production rendering, prepare a portable bundle and submit the full frame range to one GPU Pod:
 
 ```sh
 visual-runpod-prepare \
   --scene scene.blend --scene-script scenes/anatomy.py --asset-dir assets \
   --output render-job --width 1920 --height 1080 --fps 30 \
-  --frame-start 1 --frame-end 240 --chunk-size 60 --samples 128 --device auto
+  --frame-start 1 --frame-end 240 --samples 128 --device auto
 
-# Put RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID, and R2_* in the protected central .env.
-# Only visual-runpod loads these values; they are never bundled.
+# RUNPOD_API_KEY must already be exported in this shell (for example via ~/.zshrc).
+# Keep Pod/R2 settings in the protected .env; visual-runpod never bundles them.
 visual-runpod submit --bundle render-job --r2
 
-# Follow live chunk/frame progress and download when complete.
+# Follow Pod/frame progress and download when complete.
 visual-runpod progress --jobs-file render-job.runpod.json --download
 visual-runpod retry --jobs-file render-job.runpod.json
 visual-runpod cleanup --jobs-file render-job.runpod.json --confirm
 ```
 
-The `--r2` mode uploads the bundle and generates per-chunk presigned GET/PUT
-URLs automatically. Configure `R2_ACCOUNT_ID`, `R2_BUCKET`,
-`R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` first. The manual signed-URL
-options remain available for S3-compatible providers other than R2.
+The `--r2` mode uploads the bundle, then creates presigned input, output, and
+status URLs automatically. Configure `R2_ACCOUNT_ID`, `R2_BUCKET`,
+`R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY` first. The Pod writes its
+progress/result status to R2; the CLI deletes the Pod after a terminal result
+when it is monitored through `status`, `wait`, or `progress`, unless
+`--keep-pod` was explicitly selected for debugging.
 
 Downloaded frames and reports are verified locally, then composed with FFmpeg:
 
@@ -231,38 +248,53 @@ visual-python /Users/taeyoung/Developer/visual-explainer-toolchain/scripts/verif
 
 For local CPU fallback diagnostics or transparent CLI access, `visual-blender` and `visual-blender-render` remain available.
 
-## Runpod Serverless render and compute offload
+## Runpod Pod render and compute offload
 
-Manim, ordinary PyGfx, Taichi simulations, EEVEE previews, and final FFmpeg composition stay local by default. **Blender Cycles production rendering is routed to Runpod Serverless.**
+Manim, ordinary PyGfx, Taichi simulations, EEVEE previews, and final FFmpeg composition stay local by default. **Blender Cycles production rendering is routed to a Runpod Pod.**
 
-`visual-runpod-prepare` copies only the scene, optional scene script, explicitly named assets, and small Blender helpers. It creates a `runpod-serverless` manifest and an empty output directory without contacting Runpod. `visual-runpod` archives that bundle, splits the frame range, submits one job per chunk, polls the endpoint, downloads signed output archives, and merges/verifies the PNG sequence. Never include `.env` files, credentials, browser profiles, unrelated repository files, private media, or datasets in a bundle.
+`visual-runpod-prepare` copies only the scene, optional scene script, explicitly named assets, and small Blender helpers. It creates a `runpod-pod` manifest and an empty output directory without contacting Runpod. `visual-runpod` archives and uploads that bundle, creates one Pod that owns the complete range, reads status from R2, downloads the signed output archive, and verifies the PNG sequence. Never include `.env` files, credentials, browser profiles, unrelated repository files, private media, or datasets in a bundle.
 
-The worker image is built from `runpod/Dockerfile` with Blender pinned and deployed as a Runpod Serverless endpoint. Keep one worker request bound to one GPU and one Blender process; horizontal parallelism comes from the endpoint queue and chunk jobs. The worker downloads the input archive, verifies its SHA-256, validates portable assets on the first chunk, renders Cycles, verifies the chunk, uploads an archive, and returns its digest. A requested GPU is accepted only when the completed Blender report says `render_device=GPU`.
+The worker image is built from `runpod/Dockerfile` with Blender pinned. Keep one Pod bound to one GPU and one Blender process. The worker downloads the input archive, verifies its SHA-256, validates portable assets, renders Cycles, verifies the range, uploads an archive, and writes status to R2. A requested GPU is accepted only when the completed Blender report says `render_device=GPU`.
 
-Build and push the image from an amd64-capable Docker host, then select that image in a Runpod endpoint:
+The disposable worker image uses a digest-pinned CUDA **base** image to keep
+Pod pull time lower than the runtime variant while retaining CUDA/OptiX. It is
+tested with Ubuntu 22.04's Python 3.10, so worker code uses
+`datetime.timezone.utc` (not the Python 3.11-only `datetime.UTC`). One-shot
+Pods are created with SSH disabled and no port 22; the worker needs only its
+environment-provided event and R2 presigned URLs.
+
+Build and push the image from an amd64-capable Docker host, then configure its immutable image reference in `.env`:
 
 ```sh
 docker build --platform linux/amd64 \
   -f runpod/Dockerfile \
   --build-arg BLENDER_VERSION=5.2.1 \
   --build-arg BLENDER_SHA256=a31f524fa99a527d3d52b7f5aaa68c34e1a19d5a1c9473f79c5cc610fd5b10e9 \
-  -t ghcr.io/ORG/manim-blender-worker:5.2.1 .
-docker push ghcr.io/ORG/manim-blender-worker:5.2.1
+  -t ghcr.io/kimpossible-ty/manim-blender-worker:5.2.1-pod-slim-py310.20260903 .
+docker push ghcr.io/kimpossible-ty/manim-blender-worker:5.2.1-pod-slim-py310.20260903
 ```
 
-Use a queue-based endpoint with a small active-worker floor and a max-worker limit appropriate to the account's GPU budget. Put `RUNPOD_API_KEY`, `RUNPOD_ENDPOINT_ID`, and R2 credentials in the protected central `.env`; only `visual-runpod` loads them. Signed input/output URLs belong in the `0600` jobs file and must not be committed.
+Install `runpodctl` and export `RUNPOD_API_KEY` in the shell that launches the command. Put `RUNPOD_POD_IMAGE`, `RUNPOD_POD_GPU_ID`, and R2 credentials in the protected central `.env`; only `visual-runpod` loads those settings. Choose the Pod's container disk, finite `RUNPOD_POD_TERMINATE_AFTER`, and optional data-centre/registry-auth settings there. Signed input/output/status URLs belong in the `0600` jobs file and must not be committed.
+
+The client probes the installed `runpodctl` help output before adding optional
+create flags. Current v2.12 builds do not expose `--terminate-after`, so the
+finite value is enforced as the local wait/cost budget and terminal/timeout
+cleanup deletes the Pod. Cleanup is idempotent if a user or watchdog already
+removed it; for unattended work, also set an account spend limit or external
+watchdog. R2 status updates may arrive out of order during archive upload, so
+the client clamps aggregate frame progress monotonically.
 
 ```sh
 # Inspect an already-submitted batch:
 visual-runpod status --jobs-file render-job.runpod.json
 
-# Follow Runpod /stream events: phase, chunk, frame count, and percentage.
+# Follow R2-backed Pod events: phase, frame count, and percentage.
 visual-runpod progress --jobs-file render-job.runpod.json
 
-# Download only after every chunk is complete:
+# Download only after the Pod has completed:
 visual-runpod download --jobs-file render-job.runpod.json
 
-# Retry failed R2 chunks or clean this batch after verification:
+# Retry a failed Pod with a fresh Pod or clean this batch after verification:
 visual-runpod retry --jobs-file render-job.runpod.json
 visual-runpod cleanup --jobs-file render-job.runpod.json --confirm
 ```
@@ -437,7 +469,7 @@ The tests prove more than imports: the narration tests mock Gemini while exercis
 - Taichi emits an upstream `SyntaxWarning` from `taichi.tools.image` on its first Python 3.13 import; this does not affect tested kernels or PyGfx transfer.
 - Renderer and simulation backends are printed by the smoke tests so runtime behavior is observable.
 - Blender 5.2.1 LTS is installed as a native Apple Silicon application. Local EEVEE previews and Cycles CPU are tested; GPU success is reported only if an actual Cycles GPU render completes.
-- Runpod Serverless rendering is intentionally not contacted by local validation. Remote API calls happen only through `visual-runpod` with explicit credentials.
+- Runpod Pods are intentionally not created by local validation. Remote Pod-control calls happen only through `visual-runpod` with explicit credentials.
 
 ## Maintain the toolchain
 
@@ -450,7 +482,11 @@ uv sync --frozen --no-managed-python
 
 Commit `pyproject.toml` and `uv.lock` together only after the real render and isolation tests pass. Never install these dependencies manually into `.venv` or add them to individual video projects.
 
-The tracked Codex skill lives at `skills/visual-explainer-toolchain`; its installed path is a symlink back to this repository. Edit the tracked copy and validate it with the Codex skill validator.
+The tracked visualization skill lives at `skills/visual-explainer-toolchain`; its
+installed path is a symlink back to this repository. The
+`publish-typst-supplement` skill lives at
+`~/Developer/codex-skills/publish-typst-supplement`. Edit each skill at its
+authoritative path and validate it with the Codex skill validator.
 
 ## Official references
 
@@ -462,6 +498,6 @@ The tracked Codex skill lives at `skills/visual-explainer-toolchain`; its instal
 - [Manim Voiceover](https://github.com/ManimCommunity/manim-voiceover)
 - [uv `run --project`](https://docs.astral.sh/uv/reference/cli/#uv-run)
 - [Blender command line](https://docs.blender.org/manual/en/latest/advanced/command_line/arguments.html)
-- [Runpod Serverless overview](https://docs.runpod.io/serverless/overview)
-- [Runpod Serverless endpoints](https://docs.runpod.io/serverless/endpoints/overview)
-- [Runpod Serverless worker deployment](https://docs.runpod.io/serverless/workers/deploy)
+- [Runpod Pods overview](https://docs.runpod.io/pods/overview)
+- [Runpodctl Pod commands](https://docs.runpod.io/runpodctl/commands/pod)
+- [Runpod Pod templates](https://docs.runpod.io/pods/templates)

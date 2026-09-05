@@ -1,7 +1,8 @@
-"""Offline contract tests for the Runpod bundle, client, and worker boundary."""
+"""Offline contracts for the disposable Runpod Pod render workflow."""
 
 from __future__ import annotations
 
+from contextlib import redirect_stdout
 import importlib.util
 import io
 import json
@@ -10,10 +11,9 @@ import shutil
 import struct
 import subprocess
 import sys
-import tarfile
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
-from contextlib import redirect_stdout
 from unittest.mock import patch
 import zlib
 
@@ -33,44 +33,35 @@ def load_module(name: str, path: Path):
     return module
 
 
-class RunpodRenderJobTests(unittest.TestCase):
-    def test_runpod_api_key_can_use_cli_config_without_printing_it(self) -> None:
-        client = load_module("runpod_client_auth_test", ROOT / "scripts" / "runpod_client.py")
-        with TemporaryDirectory() as directory:
-            config = Path(directory) / "config.toml"
-            config.write_text("[runpod]\napi_key = 'config-key'\n", encoding="utf-8")
-            with patch.dict("os.environ", {"RUNPOD_CONFIG_FILE": str(config)}, clear=True):
-                self.assertEqual(client._runpod_api_key(), "config-key")
+def png(width: int, height: int) -> bytes:
+    raw = b"".join(b"\0" + bytes((40, 80, 120, 255)) * width for _ in range(height))
 
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data))
+            + kind
+            + data
+            + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+        )
+
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
+
+
+class RunpodPodRenderTests(unittest.TestCase):
     def prepare(self, temp: Path, *extra: str) -> Path:
         scene = temp / "scene.blend"
         scene.write_bytes(b"offline fixture")
         job = temp / "render-job"
         result = subprocess.run(
             [
-                sys.executable,
-                str(PREPARE),
-                "--scene",
-                str(scene),
-                "--output",
-                str(job),
-                "--width",
-                "96",
-                "--height",
-                "54",
-                "--fps",
-                "12",
-                "--frame-start",
-                "0",
-                "--frame-end",
-                "121",
-                "--chunk-size",
-                "60",
-                "--samples",
-                "2",
-                "--device",
-                "auto",
-                *extra,
+                sys.executable, str(PREPARE), "--scene", str(scene), "--output", str(job),
+                "--width", "96", "--height", "54", "--fps", "12", "--frame-start", "0",
+                "--frame-end", "1", "--samples", "2", "--device", "auto", *extra,
             ],
             cwd=ROOT,
             capture_output=True,
@@ -80,7 +71,7 @@ class RunpodRenderJobTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return job
 
-    def test_prepare_and_verify_runpod_bundle(self) -> None:
+    def test_prepare_and_verify_pod_bundle(self) -> None:
         with TemporaryDirectory() as directory:
             job = self.prepare(Path(directory))
             verified = subprocess.run(
@@ -92,39 +83,23 @@ class RunpodRenderJobTests(unittest.TestCase):
             )
             self.assertEqual(verified.returncode, 0, verified.stderr + verified.stdout)
             manifest = json.loads((job / "render_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["backend"], "runpod-serverless")
-            self.assertEqual(manifest["render_engine"], "CYCLES")
+            self.assertEqual(manifest["backend"], "runpod-pod")
+            self.assertNotIn("chunk_size", manifest["render"])
             self.assertTrue(manifest["require_gpu"])
-            self.assertEqual(manifest["render"]["chunk_size"], 60)
             self.assertFalse(any((job / "output").iterdir()))
 
     def test_sensitive_asset_is_rejected(self) -> None:
         with TemporaryDirectory() as directory:
             temp = Path(directory)
             scene = temp / "scene.blend"
-            scene.write_bytes(b"offline fixture")
+            scene.write_bytes(b"fixture")
             secret = temp / ".env.local"
             secret.write_text("TOKEN=not-for-upload\n", encoding="utf-8")
             result = subprocess.run(
                 [
-                    sys.executable,
-                    str(PREPARE),
-                    "--scene",
-                    str(scene),
-                    "--asset-file",
-                    str(secret),
-                    "--output",
-                    str(temp / "render-job"),
-                    "--width",
-                    "96",
-                    "--height",
-                    "54",
-                    "--fps",
-                    "12",
-                    "--frame-start",
-                    "1",
-                    "--frame-end",
-                    "1",
+                    sys.executable, str(PREPARE), "--scene", str(scene), "--asset-file", str(secret),
+                    "--output", str(temp / "render-job"), "--width", "96", "--height", "54",
+                    "--fps", "12", "--frame-start", "1", "--frame-end", "1",
                 ],
                 cwd=ROOT,
                 capture_output=True,
@@ -134,328 +109,129 @@ class RunpodRenderJobTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("credential-like", result.stderr)
 
-    def test_chunk_ids_and_worker_contract(self) -> None:
-        client = load_module("runpod_client_test", ROOT / "scripts" / "runpod_client.py")
-        worker = load_module("runpod_worker_test", ROOT / "runpod" / "worker" / "core.py")
+    def test_worker_accepts_one_full_pod_range(self) -> None:
+        worker = load_module("runpod_pod_worker_contract", ROOT / "runpod" / "worker" / "core.py")
         with TemporaryDirectory() as directory:
             job = self.prepare(Path(directory))
-            manifest = json.loads((job / "render_manifest.json").read_text(encoding="utf-8"))
-            chunks = client._chunk_records(manifest, 60)
-            self.assertEqual(
-                [(item["frame_start"], item["frame_end"]) for item in chunks],
-                [(0, 59), (60, 119), (120, 121)],
+            manifest, chunk = worker._manifest_and_chunk(
+                {"chunk": {"index": 0, "frame_start": 0, "frame_end": 1}}, job
             )
-            loaded, chunk = worker._manifest_and_chunk(
-                {
-                    "chunk": chunks[1],
-                },
-                job,
-            )
-            self.assertEqual(loaded["backend"], "runpod-serverless")
-            self.assertEqual(chunk["frame_start"], 60)
+            self.assertEqual(manifest["backend"], "runpod-pod")
+            self.assertEqual(chunk["frame_end"], 1)
 
-    def test_worker_progress_uses_frames_and_optional_cycles_samples(self) -> None:
-        worker = load_module("runpod_worker_progress_test", ROOT / "runpod" / "worker" / "core.py")
+    def test_worker_progress_is_frame_based(self) -> None:
+        worker = load_module("runpod_pod_worker_progress", ROOT / "runpod" / "worker" / "core.py")
         with TemporaryDirectory() as directory:
             output = Path(directory)
-            (output / "frame_0001.png").write_bytes(b"non-empty")
-            event = worker._frame_progress(output, 1, 3)
+            (output / "frame_0000.png").write_bytes(b"non-empty")
+            event = worker._frame_progress(output, 0, 2)
             self.assertEqual(event["frames_completed"], 1)
-            self.assertEqual(event["frames_total"], 3)
             self.assertEqual(event["percent"], 33.3)
-            sample_event = worker._progress_from_line(
-                "Rendered 32 / 64 samples",
-                output=output,
-                frame_start=1,
-                frame_end=3,
+
+    def test_api_key_is_read_from_environment_only(self) -> None:
+        client = load_module("runpod_pod_client_auth", ROOT / "scripts" / "runpod_client.py")
+        with TemporaryDirectory() as directory:
+            config = Path(directory) / "config.toml"
+            config.write_text("[runpod]\napi_key = 'config-key'\n", encoding="utf-8")
+            with patch.dict("os.environ", {"RUNPOD_CONFIG_FILE": str(config)}, clear=True):
+                self.assertEqual(client._runpod_api_key(), "")
+            with patch.dict("os.environ", {"RUNPOD_API_KEY": "env-key"}, clear=True):
+                self.assertEqual(client._runpod_api_key(), "env-key")
+
+    def test_controller_creates_pod_with_a_duration_termination_guard(self) -> None:
+        client = load_module("runpod_pod_controller", ROOT / "scripts" / "runpod_client.py")
+        commands: list[list[str]] = []
+
+        def fake_run(command, **_kwargs):
+            commands.append(command)
+            if command[-1] == "--help":
+                return SimpleNamespace(returncode=0, stdout="--terminate-after", stderr="")
+            return SimpleNamespace(returncode=0, stdout='{"id":"pod-123"}', stderr="")
+
+        settings = {
+            "image": "registry.example/blender:1", "gpu_id": "NVIDIA GeForce RTX 4090",
+            "container_disk_gb": 30, "terminate_after": "4h", "registry_auth_id": None,
+            "data_center_ids": "US-CA-2",
+        }
+        with patch.object(client.subprocess, "run", side_effect=fake_run):
+            pod_id = client.RunpodPodController("runpodctl").create(
+                settings, {"RENDER_JOB_INPUT_B64": "abc"}, "cycles-smoke"
             )
-            self.assertIsNotNone(sample_event)
-            assert sample_event is not None
-            self.assertEqual(sample_event["samples_completed"], 32)
-            self.assertEqual(sample_event["samples_total"], 64)
-            cycles_event = worker._progress_from_line(
-                "BLENDER_CYCLES_PROGRESS frame=2 sample=16/32",
-                output=output,
-                frame_start=1,
-                frame_end=3,
+        self.assertEqual(pod_id, "pod-123")
+        self.assertIn("--terminate-after", commands[1])
+        self.assertIn("--ssh=false", commands[1])
+        self.assertIn("--env", commands[1])
+        self.assertIn("--data-center-ids", commands[1])
+
+    def test_controller_treats_missing_pod_as_terminal_and_delete_is_idempotent(self) -> None:
+        client = load_module("runpod_pod_controller_missing", ROOT / "scripts" / "runpod_client.py")
+        controller = client.RunpodPodController("runpodctl")
+        with patch.object(
+            controller,
+            "_run",
+            side_effect=client.RunpodError("failed to get pod: pod not found"),
+        ):
+            self.assertEqual(controller.runtime_status("pod-gone"), "TERMINATED")
+            controller.delete("pod-gone")
+
+    def test_controller_omits_unsupported_optional_termination_flag(self) -> None:
+        client = load_module("runpod_pod_controller_legacy_cli", ROOT / "scripts" / "runpod_client.py")
+        commands: list[list[str]] = []
+
+        def fake_run(command, **_kwargs):
+            commands.append(command)
+            if command[-1] == "--help":
+                return SimpleNamespace(returncode=0, stdout="--wait-timeout", stderr="")
+            return SimpleNamespace(returncode=0, stdout='{"id":"pod-legacy"}', stderr="")
+
+        settings = {
+            "image": "registry.example/blender:1", "gpu_id": "NVIDIA GeForce RTX 4090",
+            "container_disk_gb": 30, "terminate_after": "4h", "registry_auth_id": None,
+            "data_center_ids": None,
+        }
+        with patch.object(client.subprocess, "run", side_effect=fake_run):
+            pod_id = client.RunpodPodController("runpodctl").create(
+                settings, {"RENDER_JOB_INPUT_B64": "abc"}, "cycles-legacy"
             )
-            self.assertIsNotNone(cycles_event)
-            assert cycles_event is not None
-            self.assertEqual(cycles_event["frame"], 2)
-            self.assertEqual(cycles_event["samples_completed"], 16)
-            self.assertEqual(cycles_event["samples_total"], 32)
+        self.assertEqual(pod_id, "pod-legacy")
+        self.assertNotIn("--terminate-after", commands[1])
+        self.assertIn("--ssh=false", commands[1])
 
-    def test_worker_blender_command_propagates_python_exceptions(self) -> None:
-        worker = load_module("runpod_worker_command_test", ROOT / "runpod" / "worker" / "core.py")
-        command = worker._blender_runner_command("/opt/blender/blender", Path("/bundle"))
-        self.assertEqual(
-            command,
-            [
-                "/opt/blender/blender",
-                "--background",
-                "--python-exit-code",
-                "1",
-                "--python",
-                "/bundle/scripts/blender_render.py",
-                "--",
-            ],
+    def test_remote_progress_never_regresses_during_archive_upload(self) -> None:
+        client = load_module("runpod_pod_client_progress_order", ROOT / "scripts" / "runpod_client.py")
+        record = {
+            "status": "RUNNING",
+            "progress": {"frame": 1, "frames_completed": 1, "percent": 100.0, "samples_completed": 4},
+        }
+        client._apply_remote_status(
+            record,
+            {
+                "status": "RUNNING",
+                "progress": {"frame": 0, "frames_completed": 0, "percent": 0.0, "samples_completed": 0},
+            },
         )
+        progress = record["progress"]
+        self.assertIsInstance(progress, dict)
+        self.assertEqual(progress["frames_completed"], 1)
+        self.assertEqual(progress["percent"], 100.0)
+        self.assertEqual(record["pod_runtime_status"], "RUNNING")
 
-        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
-            with self.assertRaises(worker.BlenderProcessError) as raised:
-                list(
-                    worker._run_with_progress(
-                        [
-                            sys.executable,
-                            "-c",
-                            "import sys; print('scene script traceback'); sys.exit(1)",
-                        ],
-                        cwd=Path(directory),
-                        label="test Blender command",
-                        output=Path(directory),
-                        frame_start=1,
-                        frame_end=1,
-                    )
-                )
-        self.assertEqual(raised.exception.return_code, 1)
-        self.assertIn("scene script traceback", raised.exception.log_tail)
+    def test_late_running_status_does_not_downgrade_terminal_record(self) -> None:
+        client = load_module("runpod_pod_client_status_order", ROOT / "scripts" / "runpod_client.py")
+        record = {"status": "RESULT_PENDING", "completion_error": "waiting for digest"}
+        client._apply_remote_status(record, {"status": "RUNNING", "progress": {"frames_completed": 0}})
+        self.assertEqual(record["status"], "RESULT_PENDING")
 
-    def test_worker_retries_only_automatic_optix_failures_with_cuda(self) -> None:
-        worker = load_module("runpod_worker_optix_test", ROOT / "runpod" / "worker" / "core.py")
-        optix_error = worker.BlenderProcessError(
-            "Cycles chunk render",
-            1,
-            "ERROR Failed to load OptiX kernel (OPTIX_ERROR_INTERNAL_COMPILER_ERROR)",
+    def test_termination_guard_keeps_runpod_duration_syntax(self) -> None:
+        client = load_module("runpod_pod_duration", ROOT / "scripts" / "runpod_client.py")
+        args = client.build_parser().parse_args(
+            ["submit", "--bundle", "/tmp/render", "--r2", "--pod-image", "image", "--gpu-id", "gpu", "--terminate-after", "2h"]
         )
-        self.assertTrue(worker._should_retry_with_cuda("auto", optix_error))
-        self.assertTrue(worker._should_retry_with_cuda("gpu", optix_error))
-        self.assertFalse(worker._should_retry_with_cuda("optix", optix_error))
-        self.assertFalse(worker._should_retry_with_cuda("cuda", optix_error))
-        scene_error = worker.BlenderProcessError(
-            "Cycles chunk render", 1, "Traceback: scene script failed"
-        )
-        self.assertFalse(worker._should_retry_with_cuda("auto", scene_error))
+        settings = client._pod_settings_from_args(args)
+        self.assertEqual(settings["terminate_after"], "2h")
 
-        fallback = worker._with_compute_device(
-            ["blender", "--device", "auto", "--require-gpu"], "cuda"
-        )
-        self.assertEqual(fallback, ["blender", "--device", "cuda", "--require-gpu"])
-
-    def test_worker_missing_render_report_is_a_clear_failure(self) -> None:
-        worker = load_module("runpod_worker_report_test", ROOT / "runpod" / "worker" / "core.py")
-        with TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(
-                RuntimeError, "exited without render_report.json"
-            ):
-                worker._load_render_report(Path(directory) / "render_report.json")
-
-    def test_stream_refresh_persists_progress_without_printing_urls(self) -> None:
-        client = load_module("runpod_client_stream_test", ROOT / "scripts" / "runpod_client.py")
-
-        class FakeApi:
-            def stream(self, job_id: str) -> dict[str, object]:
-                return {
-                    "status": "IN_PROGRESS",
-                    "stream": [
-                        {
-                            "output": {
-                                "schema_version": 1,
-                                "type": "progress",
-                                "chunk_id": "chunk-0000-000001-000003",
-                                "phase": "render",
-                                "status": "IN_PROGRESS",
-                                "frames_completed": 2,
-                                "frames_total": 3,
-                                "percent": 66.7,
-                            }
-                        }
-                    ],
-                }
-
-        with TemporaryDirectory() as directory:
-            jobs_path = Path(directory) / "jobs.json"
-            state = {
-                "schema_version": 1,
-                "jobs": [
-                    {
-                        "chunk_id": "chunk-0000-000001-000003",
-                        "frame_start": 1,
-                        "frame_end": 3,
-                        "job_id": "job-1",
-                        "status": "IN_PROGRESS",
-                    }
-                ],
-            }
-            jobs_path.write_text(json.dumps(state), encoding="utf-8")
-            captured = io.StringIO()
-            with redirect_stdout(captured):
-                completed, failed = client.refresh_stream_state(FakeApi(), state, jobs_path)
-            self.assertEqual((completed, failed), (0, 0))
-            self.assertIn("RUNPOD_CHUNK chunk=chunk-0000-000001-000003 phase=render", captured.getvalue())
-            self.assertNotIn("https://", captured.getvalue())
-            updated = json.loads(jobs_path.read_text(encoding="utf-8"))
-            self.assertEqual(updated["jobs"][0]["progress"]["frames_completed"], 2)
-
-    def test_completed_without_valid_result_is_rechecked_and_not_counted_as_success(self) -> None:
-        client = load_module("runpod_client_missing_result_test", ROOT / "scripts" / "runpod_client.py")
-
-        class FakeApi:
-            calls = 0
-            responses = [
-                {"status": "COMPLETED"},
-                {"status": "FAILED", "error": "worker failed before producing a result"},
-            ]
-
-            def status(self, job_id: str) -> dict[str, object]:
-                self.calls += 1
-                return self.responses.pop(0)
-
-        with TemporaryDirectory() as directory:
-            jobs_path = Path(directory) / "jobs.json"
-            state = {
-                "schema_version": 1,
-                "jobs": [
-                    {
-                        "chunk_id": "chunk-0000-000001-000001",
-                        "frame_start": 1,
-                        "frame_end": 1,
-                        "job_id": "job-1",
-                        "status": "COMPLETED",
-                        "result": {"archive_sha256": "not-a-sha256"},
-                    }
-                ],
-            }
-            jobs_path.write_text(json.dumps(state), encoding="utf-8")
-            api = FakeApi()
-            completed, failed = client.refresh_state(api, state, jobs_path)
-            self.assertEqual((completed, failed), (0, 0))
-            self.assertEqual(api.calls, 1)
-            self.assertEqual(state["jobs"][0]["status"], "RESULT_PENDING")
-
-            completed, failed = client.refresh_state(api, state, jobs_path)
-            self.assertEqual((completed, failed), (0, 1))
-            self.assertEqual(api.calls, 2)
-            self.assertEqual(state["jobs"][0]["status"], "FAILED")
-
-    def test_stream_completed_without_result_uses_status_fallback(self) -> None:
-        client = load_module("runpod_client_stream_missing_result_test", ROOT / "scripts" / "runpod_client.py")
-
-        class FakeApi:
-            status_calls = 0
-
-            def stream(self, job_id: str) -> dict[str, object]:
-                return {"status": "COMPLETED", "stream": []}
-
-            def status(self, job_id: str) -> dict[str, object]:
-                self.status_calls += 1
-                return {"status": "FAILED", "error": "worker failed before producing a result"}
-
-        with TemporaryDirectory() as directory:
-            jobs_path = Path(directory) / "jobs.json"
-            state = {
-                "schema_version": 1,
-                "jobs": [
-                    {
-                        "chunk_id": "chunk-0000-000001-000001",
-                        "frame_start": 1,
-                        "frame_end": 1,
-                        "job_id": "job-1",
-                        "status": "IN_PROGRESS",
-                    }
-                ],
-            }
-            jobs_path.write_text(json.dumps(state), encoding="utf-8")
-            api = FakeApi()
-            completed, failed = client.refresh_stream_state(api, state, jobs_path)
-            self.assertEqual((completed, failed), (0, 1))
-            self.assertEqual(api.status_calls, 1)
-            self.assertEqual(state["jobs"][0]["status"], "FAILED")
-
-    def test_completed_record_with_valid_result_remains_successful(self) -> None:
-        client = load_module("runpod_client_valid_result_test", ROOT / "scripts" / "runpod_client.py")
-
-        class FakeApi:
-            def status(self, job_id: str) -> dict[str, object]:
-                raise AssertionError(f"valid completed job should not be polled: {job_id}")
-
-        with TemporaryDirectory() as directory:
-            jobs_path = Path(directory) / "jobs.json"
-            state = {
-                "schema_version": 1,
-                "jobs": [
-                    {
-                        "chunk_id": "chunk-0000-000001-000001",
-                        "frame_start": 1,
-                        "frame_end": 1,
-                        "job_id": "job-1",
-                        "status": "COMPLETED",
-                        "result": {"archive_sha256": "a" * 64},
-                    }
-                ],
-            }
-            jobs_path.write_text(json.dumps(state), encoding="utf-8")
-            completed, failed = client.refresh_state(FakeApi(), state, jobs_path)
-            self.assertEqual((completed, failed), (1, 0))
-
-    def test_safe_extract_rejects_traversal(self) -> None:
-        utils = load_module("runpod_utils_test", ROOT / "scripts" / "runpod_job_utils.py")
-        with TemporaryDirectory() as directory:
-            temp = Path(directory)
-            archive_path = temp / "unsafe.tar.gz"
-            with tarfile.open(archive_path, "w:gz") as archive:
-                info = tarfile.TarInfo("../escape.txt")
-                payload = b"nope"
-                info.size = len(payload)
-                import io
-
-                archive.addfile(info, io.BytesIO(payload))
-            with self.assertRaises(ValueError):
-                utils.safe_extract_tar(archive_path, temp / "extract")
-
-    def test_submit_fans_out_chunks_without_networking_in_test(self) -> None:
-        client = load_module("runpod_client_submit_test", ROOT / "scripts" / "runpod_client.py")
-
-        class FakeApi:
-            def __init__(self, endpoint_id: str, api_key: str, base_url: str) -> None:
-                self.calls = []
-
-            def submit(self, payload: dict[str, object], policy: dict[str, int]) -> dict[str, object]:
-                self.calls.append((payload, policy))
-                return {"id": f"fake-job-{len(self.calls)}"}
-
-        with TemporaryDirectory() as directory:
-            temp = Path(directory)
-            job = self.prepare(temp)
-            args = client.build_parser().parse_args(
-                [
-                    "--endpoint-id",
-                    "endpoint-test",
-                    "submit",
-                    "--bundle",
-                    str(job),
-                    "--input-url",
-                    "https://storage.example/input.tar.gz",
-                    "--output-url-template",
-                    "https://storage.example/{chunk_id}.tar.gz",
-                    "--jobs-file",
-                    str(temp / "jobs.json"),
-                ]
-            )
-            with patch.object(client, "RunpodApi", FakeApi), patch.dict(
-                "os.environ", {"RUNPOD_API_KEY": "test-key"}, clear=False
-            ):
-                result = client.submit(args)
-            self.assertEqual(result, 0)
-            state = json.loads((temp / "jobs.json").read_text(encoding="utf-8"))
-            self.assertEqual([item["job_id"] for item in state["jobs"]], [
-                "fake-job-1",
-                "fake-job-2",
-                "fake-job-3",
-            ])
-            self.assertTrue((temp / "jobs.json").stat().st_mode & 0o077 == 0)
-
-    def test_r2_mode_uploads_once_and_generates_chunk_urls(self) -> None:
-        client = load_module("runpod_client_r2_submit_test", ROOT / "scripts" / "runpod_client.py")
+    def test_submit_uses_one_pod_and_never_persists_input_urls_in_stdout(self) -> None:
+        client = load_module("runpod_pod_client_submit", ROOT / "scripts" / "runpod_client.py")
 
         class FakeR2:
             bucket = "render-bucket"
@@ -474,247 +250,152 @@ class RunpodRenderJobTests(unittest.TestCase):
             def get_url(self, key: str) -> str:
                 return f"https://storage.example/get/{key}"
 
-        class FakeApi:
-            calls: list[dict[str, object]] = []
+        class FakeController:
+            instances: list["FakeController"] = []
 
-            def __init__(self, endpoint_id: str, api_key: str, base_url: str) -> None:
-                self.calls = []
-                type(self).calls = self.calls
+            def __init__(self) -> None:
+                self.calls: list[tuple[dict[str, object], dict[str, str], str]] = []
+                type(self).instances.append(self)
 
-            def submit(self, payload: dict[str, object], policy: dict[str, int]) -> dict[str, object]:
-                self.calls.append(payload)
-                return {"id": f"fake-r2-job-{len(self.calls)}"}
+            def create(self, settings, environment, name):
+                self.calls.append((settings, environment, name))
+                return "pod-test"
 
         with TemporaryDirectory() as directory:
             temp = Path(directory)
             job = self.prepare(temp)
             args = client.build_parser().parse_args(
                 [
-                    "--endpoint-id",
-                    "endpoint-test",
-                    "submit",
-                    "--bundle",
-                    str(job),
-                    "--r2",
-                    "--jobs-file",
-                    str(temp / "jobs.json"),
+                    "submit", "--bundle", str(job), "--r2", "--pod-image", "registry.example/blender:1",
+                    "--gpu-id", "NVIDIA GeForce RTX 4090", "--jobs-file", str(temp / "jobs.json"),
                 ]
             )
-            with patch.object(client.R2Storage, "from_args", return_value=FakeR2()), patch.object(
-                client, "RunpodApi", FakeApi
-            ), patch.object(client, "_upload_with_curl") as upload, patch.dict(
-                "os.environ", {"RUNPOD_API_KEY": "test-key"}, clear=False
+            captured = io.StringIO()
+            with (
+                patch.object(client.R2Storage, "from_args", return_value=FakeR2()),
+                patch.object(client, "RunpodPodController", FakeController),
+                patch.object(client, "_upload_with_curl") as upload,
+                patch.dict("os.environ", {"RUNPOD_API_KEY": "test-key"}, clear=False),
+                redirect_stdout(captured),
             ):
-                result = client.submit(args)
-            self.assertEqual(result, 0)
+                self.assertEqual(client.submit(args), 0)
             upload.assert_called_once()
-            self.assertEqual(len(FakeApi.calls), 3)
-            self.assertTrue(all("bundle_url" in payload for payload in FakeApi.calls))
-            self.assertEqual(len({payload["output_upload_url"] for payload in FakeApi.calls}), 3)
             state = json.loads((temp / "jobs.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["storage"]["provider"], "cloudflare-r2")
-            self.assertEqual(state["storage"]["bucket"], "render-bucket")
+            self.assertEqual(state["backend"], "runpod-pod")
+            self.assertEqual(state["jobs"][0]["pod_id"], "pod-test")
+            self.assertEqual(len(FakeController.instances[0].calls), 1)
+            self.assertNotIn("https://", captured.getvalue())
 
-    def test_download_verifies_and_merges_a_completed_chunk(self) -> None:
-        client = load_module("runpod_client_download_test", ROOT / "scripts" / "runpod_client.py")
-        utils = load_module("runpod_utils_download_test", ROOT / "scripts" / "runpod_job_utils.py")
+    def test_remote_status_updates_renderpulse_payload_without_urls(self) -> None:
+        client = load_module("runpod_pod_client_status", ROOT / "scripts" / "runpod_client.py")
+        digest = "a" * 64
+        state = {
+            "schema_version": 2,
+            "backend": "runpod-pod",
+            "jobs": [
+                {
+                    "chunk_id": "pod-000000-000003", "frame_start": 0, "frame_end": 3,
+                    "pod_id": "pod-1", "status_download_url": "https://storage.example/status",
+                    "status": "STARTING",
+                }
+            ],
+        }
+        remote = {
+            "status": "COMPLETED",
+            "result": {"archive_sha256": digest, "render_device": "GPU"},
+        }
+        with TemporaryDirectory() as directory, patch.object(client, "_remote_status", return_value=remote):
+            path = Path(directory) / "jobs.json"
+            captured = io.StringIO()
+            with redirect_stdout(captured):
+                completed, failed = client.refresh_state(object(), state, path)
+        self.assertEqual((completed, failed), (1, 0))
+        payload = client.work_status_payload(state)
+        self.assertEqual(payload["status"], "COMPLETED")
+        self.assertEqual(payload["progress"]["percent"], 100.0)
+        self.assertNotIn("https://", json.dumps(payload))
+        self.assertNotIn("https://", captured.getvalue())
 
-        def png(width: int, height: int) -> bytes:
-            raw = b"".join(b"\0" + bytes((40, 80, 120, 255)) * width for _ in range(height))
-
-            def chunk(kind: bytes, data: bytes) -> bytes:
-                return (
-                    struct.pack(">I", len(data))
-                    + kind
-                    + data
-                    + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
-                )
-
-            return (
-                b"\x89PNG\r\n\x1a\n"
-                + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
-                + chunk(b"IDAT", zlib.compress(raw))
-                + chunk(b"IEND", b"")
-            )
-
+    def test_download_verifies_one_pod_archive(self) -> None:
+        client = load_module("runpod_pod_client_download", ROOT / "scripts" / "runpod_client.py")
+        utils = load_module("runpod_pod_utils_download", ROOT / "scripts" / "runpod_job_utils.py")
         with TemporaryDirectory() as directory:
             temp = Path(directory)
             job = self.prepare(temp)
-            manifest_path = job / "render_manifest.json"
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["render"]["frame_end"] = 1
-            manifest["render"]["chunk_size"] = 2
-            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-
-            remote_output = temp / "remote-output"
-            remote_output.mkdir()
+            remote = temp / "remote-output"
+            remote.mkdir()
             for frame in (0, 1):
-                (remote_output / f"frame_{frame:04d}.png").write_bytes(png(96, 54))
-            (remote_output / "render_report.json").write_text(
+                (remote / f"frame_{frame:04d}.png").write_bytes(png(96, 54))
+            (remote / "render_report.json").write_text(
                 json.dumps({"engine": "CYCLES", "render_executed": True, "render_device": "GPU"}),
                 encoding="utf-8",
             )
-            archive = temp / "chunk.tar.gz"
-            utils.archive_directory(remote_output, archive)
-            jobs_path = temp / "jobs.json"
-            state = {
-                "schema_version": 1,
-                "bundle": str(job),
-                "jobs": [
+            archive = temp / "pod.tar.gz"
+            utils.archive_directory(remote, archive)
+            state_path = temp / "jobs.json"
+            state_path.write_text(
+                json.dumps(
                     {
-                        "chunk_id": "chunk-0000-000000-000001",
-                        "index": 0,
-                        "frame_start": 0,
-                        "frame_end": 1,
-                        "job_id": "job-1",
-                        "status": "COMPLETED",
-                        "output_download_url": "https://storage.example/chunk.tar.gz",
-                        "result": {
-                            "archive_sha256": utils.sha256_file(archive),
-                            "render_device": "GPU",
-                        },
+                        "schema_version": 2, "backend": "runpod-pod", "jobs_file": str(state_path),
+                        "bundle": str(job), "jobs": [{"chunk_id": "pod-000000-000001", "index": 0,
+                        "frame_start": 0, "frame_end": 1, "pod_id": "pod-1", "status": "COMPLETED",
+                        "output_download_url": "https://storage.example/output", "result": {"archive_sha256": utils.sha256_file(archive), "render_device": "GPU"}}],
                     }
-                ],
-            }
-            jobs_path.write_text(json.dumps(state), encoding="utf-8")
+                ),
+                encoding="utf-8",
+            )
 
             def fake_download(_url: str, destination: Path) -> None:
                 shutil.copy2(archive, destination)
 
             with patch.object(client, "_download_file", side_effect=fake_download):
-                result = client.download_results(jobs_path)
-            self.assertEqual(result, 0)
-            self.assertTrue((job / "output" / "frame_0000.png").is_file())
-            self.assertTrue((job / "output" / "frame_0001.png").is_file())
+                self.assertEqual(client.download_results(state_path), 0)
             report = json.loads((job / "output" / "render_report.json").read_text(encoding="utf-8"))
-            self.assertEqual(report["backend"], "runpod-serverless")
-            self.assertEqual(report["render_device"], "GPU")
+            self.assertEqual(report["backend"], "runpod-pod")
+            self.assertTrue((job / "output" / "frame_0001.png").is_file())
 
-    def test_retry_resubmits_only_failed_r2_chunks_with_fresh_urls(self) -> None:
-        client = load_module("runpod_client_retry_test", ROOT / "scripts" / "runpod_client.py")
-
-        class FakeR2:
-            bucket = "render-bucket"
-            prefix = "manim-render"
-            url_expiry_seconds = 3600
-
-            def object_key(self, batch_id: str, *parts: str) -> str:
-                return "/".join((self.prefix, batch_id, *parts))
-
-            def get_url(self, key: str) -> str:
-                return f"https://storage.example/get/{key}"
-
-            def put_url(self, key: str) -> str:
-                return f"https://storage.example/put/{key}"
-
-        class FakeApi:
-            def __init__(self, endpoint_id: str, api_key: str, base_url: str) -> None:
-                self.calls = []
-
-            def submit(self, payload: dict[str, object], policy: dict[str, int]) -> dict[str, object]:
-                self.calls.append((payload, policy))
-                return {"id": "retry-job-1"}
-
+    def test_renderpulse_registry_stays_free_of_state_contents(self) -> None:
+        client = load_module("runpod_pod_client_registry", ROOT / "scripts" / "runpod_client.py")
         with TemporaryDirectory() as directory:
-            temp = Path(directory)
-            job = self.prepare(temp)
-            jobs_path = temp / "jobs.json"
-            state = {
-                "schema_version": 1,
-                "endpoint_id": "endpoint-test",
-                "bundle": str(job),
-                "bundle_sha256": "a" * 64,
-                "storage": {
-                    "provider": "cloudflare-r2",
-                    "batch_id": "render-job-batch",
-                    "input_key": "manim-render/render-job-batch/input.tar.gz",
+            registry = Path(directory) / "works.json"
+            jobs = Path(directory) / "one.runpod.json"
+            with patch.dict("os.environ", {"RENDER_PULSE_REGISTRY_FILE": str(registry)}):
+                first = client.register_work("Pod render", [str(jobs)])
+                second = client.register_work("Renamed", [str(jobs)], first["id"])
+            content = json.loads(registry.read_text(encoding="utf-8"))
+            self.assertEqual(len(content), 1)
+            self.assertEqual(content[0]["name"], "Renamed")
+            self.assertNotIn("output_download_url", json.dumps(content))
+
+    def test_pod_runner_publishes_progress_and_result(self) -> None:
+        worker_directory = ROOT / "runpod" / "worker"
+        sys.path.insert(0, str(worker_directory))
+        try:
+            runner = load_module("runpod_pod_runner", worker_directory / "pod_runner.py")
+        finally:
+            sys.path.remove(str(worker_directory))
+        event = {"chunk_id": "pod-000000-000001"}
+        published: list[dict[str, object]] = []
+        outputs = iter(
+            [
+                {"type": "progress", "phase": "render", "frames_completed": 1},
+                {"type": "result", "archive_sha256": "b" * 64},
+            ]
+        )
+        with (
+            patch.dict(
+                "os.environ",
+                {
+                    "RENDER_STATUS_UPLOAD_URL": "https://storage.example/status",
+                    "RENDER_JOB_INPUT_B64": __import__("base64").b64encode(json.dumps(event).encode()).decode(),
                 },
-                "jobs": [
-                    {
-                        "chunk_id": "chunk-0000-000000-000059",
-                        "index": 0,
-                        "frame_start": 0,
-                        "frame_end": 59,
-                        "job_id": "failed-job-1",
-                        "status": "FAILED",
-                    },
-                    {
-                        "chunk_id": "chunk-0001-000060-000119",
-                        "index": 1,
-                        "frame_start": 60,
-                        "frame_end": 119,
-                        "job_id": "completed-job-1",
-                        "status": "COMPLETED",
-                        "result": {"archive_sha256": "b" * 64},
-                    },
-                ],
-            }
-            jobs_path.write_text(json.dumps(state), encoding="utf-8")
-            args = client.build_parser().parse_args(
-                [
-                    "--endpoint-id",
-                    "endpoint-test",
-                    "retry",
-                    "--jobs-file",
-                    str(jobs_path),
-                ]
-            )
-            with patch.object(client.R2Storage, "from_args", return_value=FakeR2()), patch.object(
-                client, "RunpodApi", FakeApi
-            ), patch.dict("os.environ", {"RUNPOD_API_KEY": "test-key"}, clear=False):
-                result = client.retry_failed_jobs(args, jobs_path)
-            self.assertEqual(result, 0)
-            updated = json.loads(jobs_path.read_text(encoding="utf-8"))
-            self.assertEqual(updated["jobs"][0]["job_id"], "retry-job-1")
-            self.assertEqual(updated["jobs"][0]["status"], "IN_QUEUE")
-            self.assertTrue(updated["jobs"][0]["output_download_url"].startswith("https://storage.example/get/"))
-            self.assertEqual(updated["jobs"][1]["job_id"], "completed-job-1")
-
-    def test_cleanup_deletes_exact_r2_batch_objects_and_marks_state(self) -> None:
-        client = load_module("runpod_client_cleanup_test", ROOT / "scripts" / "runpod_client.py")
-
-        class FakeR2:
-            prefix = "manim-render"
-
-            def object_key(self, batch_id: str, *parts: str) -> str:
-                return "/".join((self.prefix, batch_id, *parts))
-
-            def delete_url(self, key: str) -> str:
-                return f"https://storage.example/delete/{key}"
-
-        with TemporaryDirectory() as directory:
-            temp = Path(directory)
-            jobs_path = temp / "jobs.json"
-            jobs_path.write_text(
-                json.dumps(
-                    {
-                        "schema_version": 1,
-                        "storage": {
-                            "provider": "cloudflare-r2",
-                            "batch_id": "render-job-batch",
-                            "input_key": "manim-render/render-job-batch/input.tar.gz",
-                        },
-                        "jobs": [
-                            {"chunk_id": "chunk-0000-000000-000059"},
-                            {"chunk_id": "chunk-0001-000060-000119"},
-                        ],
-                    }
-                ),
-                encoding="utf-8",
-            )
-            args = client.build_parser().parse_args(
-                ["cleanup", "--jobs-file", str(jobs_path), "--confirm"]
-            )
-            deleted: list[str] = []
-            with patch.object(client.R2Storage, "from_args", return_value=FakeR2()), patch.object(
-                client, "_delete_with_curl", side_effect=lambda url: deleted.append(url)
-            ):
-                result = client.cleanup_r2_objects(args, jobs_path)
-            self.assertEqual(result, 0)
-            self.assertEqual(len(deleted), 3)
-            self.assertTrue(all(url.startswith("https://storage.example/delete/") for url in deleted))
-            updated = json.loads(jobs_path.read_text(encoding="utf-8"))
-            self.assertTrue(updated["cleaned_up"])
+                clear=True,
+            ),
+            patch.object(runner, "handle_event", return_value=outputs),
+            patch.object(runner, "_publish", side_effect=lambda _url, value: published.append(value)),
+        ):
+            self.assertEqual(runner.main(), 0)
+        self.assertEqual([item["status"] for item in published], ["STARTING", "RUNNING", "COMPLETED"])
 
 
 if __name__ == "__main__":

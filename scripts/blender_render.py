@@ -129,7 +129,7 @@ def asset_records() -> list[dict[str, object]]:
     for kind, collection in collections:
         for data_block in collection:
             raw_path = str(getattr(data_block, "filepath", "") or "")
-            if not raw_path:
+            if not raw_path or raw_path.startswith("<builtin>"):
                 continue
             packed = bool(getattr(data_block, "packed_file", None))
             library = getattr(data_block, "library", None)

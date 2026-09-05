@@ -38,7 +38,7 @@ that prose alone would hide.
 | A mesh, surface, point cloud, spatial field, or camera perspective that genuinely adds 3D insight | PyGfx |
 | Analytically prescribed motion with modest state | NumPy + PyGfx |
 | Many evolving particles, grids, fields, PDEs, or compute-heavy deformation | Taichi + PyGfx |
-| Material, anatomy, lighting, volumetrics, rigging, or a cinematic hero shot with clear explanatory value | Blender (Runpod Serverless) |
+| Material, anatomy, lighting, volumetrics, rigging, or a cinematic hero shot with clear explanatory value | Blender (Runpod Pod) |
 | Explanation, simulation, and high-fidelity shot in one lesson | Independently rendered segments + FFmpeg |
 
 Do not use Blender merely because an object is three-dimensional, or Taichi

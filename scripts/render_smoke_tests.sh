@@ -180,7 +180,7 @@ render_blender() {
     "$RUNPOD_PREPARE" \
         --scene "$source_blend" --scene-script scenes/blender_smoke_scene.py \
         --output "$job_dir" --width 96 --height 54 --fps 12 \
-        --frame-start 1 --frame-end 2 --chunk-size 2 --samples 2 --device auto
+        --frame-start 1 --frame-end 2 --samples 2 --device auto
     "$VISUAL_PYTHON" scripts/verify_runpod_render_job.py --job "$job_dir"
 }
 

@@ -21,7 +21,7 @@ not a workaround. `visual-blender` checks for restricted hardware access first
 and exits with status 77 and a concise instruction when host execution is
 required.
 
-## Workflow: Local EEVEE preview -> Runpod Cycles chunks -> Local FFmpeg
+## Workflow: Local EEVEE preview -> Runpod Pod Cycles -> Local FFmpeg
 
 1. **Local EEVEE preview**:
    Validate composition, materials, camera, and timing locally at configurable
@@ -42,15 +42,15 @@ required.
    bundle validation. Pack small assets directly; put large licensed assets in
    the explicit `assets/` directory.
 
-3. **Runpod Serverless execution (default for all Blender production renders)**:
-   Package the portable bundle, submit one Runpod job per frame chunk, and let
-   the endpoint scale workers horizontally:
+3. **Runpod Pod execution (default for all Blender production renders)**:
+   Package the portable bundle and submit its complete frame range to one
+   disposable GPU Pod:
 
    ```sh
    visual-runpod-prepare \
      --scene scene.blend --scene-script scenes/hero.py --asset-dir assets \
      --output render-job --width 1920 --height 1080 --fps 30 \
-     --frame-start 1 --frame-end 240 --chunk-size 60 --samples 128 --device auto
+     --frame-start 1 --frame-end 240 --samples 128 --device auto
 
    # Set RUNPOD_* and R2_* variables first; --r2 creates all signed URLs.
    visual-runpod submit --bundle render-job --r2
@@ -74,9 +74,9 @@ required.
    other story beats using local FFmpeg.
 
 The worker image is built from `runpod/Dockerfile`. It contains Blender and the
-small helper scripts, so a serverless invocation does not install Blender at
-request time. Keep the invariant `one worker request = one GPU = one Blender
-process`; chunk parallelism belongs to the endpoint queue.
+small helper scripts, so a fresh Pod does not install Blender at boot. Keep the
+invariant `one Pod = one GPU = one Blender process`; the Pod owns the full
+frame range and is deleted after terminal status unless retained for debugging.
 
 ## Local multi-worker & diagnostic rendering
 

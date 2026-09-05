@@ -1,7 +1,7 @@
-# Build for Runpod's Linux GPU workers with:
-#   docker build --platform linux/amd64 -f runpod/Dockerfile -t <registry>/manim-blender-worker:5.2.1 .
+# Build for disposable Runpod Linux GPU Pods with:
+#   docker build --platform linux/amd64 -f runpod/Dockerfile -t <registry>/manim-blender-worker:5.2.1-pod-slim-py310.20260903 .
 # Keep the Blender version pinned so a worker image is reproducible.
-FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04@sha256:517da2300c184c9999ec203c2665244bdebd3578d12fcc7065e83667932643d9
+FROM nvidia/cuda:12.4.1-base-ubuntu22.04@sha256:8767a245ed2c481eb245d8f6c625accc3788e1fb8612403d6b4cd4645a4f09c7
 
 ARG BLENDER_VERSION=5.2.1
 ARG BLENDER_SHA256=a31f524fa99a527d3d52b7f5aaa68c34e1a19d5a1c9473f79c5cc610fd5b10e9
@@ -47,11 +47,10 @@ RUN apt-get update \
     && rm /tmp/blender.tar.xz \
     && /opt/blender/blender --background --version
 
-RUN python3 -m pip install --no-cache-dir runpod==1.12.0
-
 WORKDIR /opt/render
 COPY scripts/blender_render.py scripts/blender_cycles.py scripts/verify_frame_sequence.py \
      scripts/runpod_job_utils.py /opt/render/scripts/
 COPY runpod/worker/ /opt/render/worker/
+RUN chmod 755 /opt/render/worker/pod_start.sh
 
-CMD ["python3", "/opt/render/worker/handler.py"]
+CMD ["/opt/render/worker/pod_start.sh"]

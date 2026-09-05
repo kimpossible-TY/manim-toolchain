@@ -50,4 +50,32 @@ final class RenderPulseTests: XCTestCase {
             )
         )
     }
+
+    func testPollingIntervalUsesTheLowestSafeFrequency() {
+        let configuration = WorkConfiguration(
+            name: "Render",
+            jobsFilePath: "/tmp/runpod.jobs.json"
+        )
+        let idleWork = WorkRuntime(configuration: configuration)
+        let runningSnapshot = WorkSnapshot(
+            schemaVersion: 1,
+            status: .running,
+            progress: WorkProgress(percent: 10, framesCompleted: 1, framesTotal: 10),
+            workers: WorkerCounts(active: 1, queued: 0, total: 1),
+            warnings: CountSummary(count: 0),
+            errors: CountSummary(count: 0),
+            updatedAt: ""
+        )
+        var runningWork = WorkRuntime(configuration: configuration)
+        runningWork.partStatuses = [
+            WorkPartStatus(
+                jobsFilePath: configuration.jobsFilePath,
+                snapshot: runningSnapshot
+            ),
+        ]
+
+        XCTAssertEqual(WorkMonitorStore.pollingInterval(for: []), .seconds(30))
+        XCTAssertEqual(WorkMonitorStore.pollingInterval(for: [idleWork]), .seconds(25))
+        XCTAssertEqual(WorkMonitorStore.pollingInterval(for: [runningWork]), .seconds(6))
+    }
 }

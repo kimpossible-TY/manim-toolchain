@@ -57,29 +57,36 @@ Choose technology after identifying the visual job that each segment must do.
 
 | Need | Route |
 | --- | --- |
-| Animated diagrams, labels, graphs, motion graphics, explanatory 2D, or simple clear 3D | Manim |
+| Kinetic typography, punchy elastic UI, animated timelines/counters, vector diagrams, explanatory 2D, fast-paced YouTube/short-form motion graphics, or simple clear 3D | Manim |
 | Meshes, surfaces, point clouds, spatial fields, camera perspective, or lightweight scientific 3D | PyGfx |
 | Analytically prescribed motion with modest state | NumPy + PyGfx |
 | Many evolving particles/grids/fields, PDEs, or compute-heavy deformation | Taichi + PyGfx |
-| Materials, lighting, anatomy, imported assets, volumetrics, rigging, or a cinematic shot that materially benefits | Blender (Runpod Serverless) |
+| Materials, lighting, anatomy, imported assets, volumetrics, rigging, or a cinematic shot that materially benefits | Blender (Runpod Pod) |
 | Beats that need different rendering strengths | Mixed segments + FFmpeg |
 
 Do not choose Blender because an object is three-dimensional, or Taichi because
 an object moves. Blender normally contributes one or a few shots whose material
-or lighting makes a visible difference; Manim keeps explanatory graphics clear.
+or lighting makes a visible difference; Manim keeps explanatory graphics clear,
+dynamic, and responsive.
 
 Useful routing checks:
 
 - An annotated process or product-flow diagram: Manim.
+- Kinetic typography, word-by-word emphasis, animated counters/gauges, or rapid-fire UI cards: Manim (with elastic rate functions and MovingCameraScene snap zooms).
+- Transparent motion graphics plates over 3D backgrounds: Manim with alpha output.
 - A triangulated model or spatial dataset: PyGfx.
 - Tens of thousands of evolving particles: Taichi + PyGfx; benchmark locally
   before considering remote compute.
 - A realistic translucent organ, material, or environment: Blender (rendered
-  via Runpod Serverless).
+  in a disposable Runpod Pod).
 - An explainer plus one photorealistic establishing shot: Manim + short Blender
-  shot (Runpod Serverless) + FFmpeg.
+  shot (Runpod Pod) + FFmpeg.
 - A rotating object: Manim or PyGfx unless realistic rendering is explicitly
   valuable.
+
+For fast-paced YouTube/short-form motion graphics patterns, elastic easing curves,
+and transparent overlay rendering in Manim, read
+[`guides/dynamic-manim.md`](guides/dynamic-manim.md).
 
 For PyGfx and Taichi implementation details, including deterministic offscreen
 rendering, backend policy, and reproducibility fields, read
@@ -108,11 +115,25 @@ claims or storyboarding. It defines patient-education direction and mandatory
 clinical, regulatory, and advertising-review gates; it is not medical or legal
 approval for a particular script.
 
-When physical or photorealistic visual fidelity is part of the deliverable,
-independently read [`realism.md`](realism.md). It defines cross-cutting asset,
-geometry, material, transformation, simulation, and verification standards. It
-does not choose the story, storyboard, camera language, or emotional lighting;
-those decisions belong to the applicable direction playbook or user brief.
+When 3D assets, styles, or physical credibility are part of the deliverable,
+**you must read [`3d-styles/README.md`](3d-styles/README.md) before authoring any
+3D scene, asset, or style decision.** It is the governing quality standard and
+navigation hub for all 3D visual styles in this toolchain.
+
+After reading `3d-styles/README.md`, also read the per-style guide that matches
+the requested or most appropriate visual style:
+
+| Style | Guide |
+| --- | --- |
+| Flat-shaded Low Poly | [`3d-styles/flat-shaded-low-poly.md`](3d-styles/flat-shaded-low-poly.md) |
+
+If the requested style has no dedicated guide yet, derive the production spec
+from the governing standard in `3d-styles/README.md` and note the gap.
+
+`3d-styles/README.md` defines cross-cutting asset, geometry, material,
+transformation, simulation, and verification standards. It does not choose the
+story, storyboard, camera language, or emotional lighting; those decisions belong
+to the applicable direction playbook or user brief.
 
 For any multi-segment video or independently produced narration, read
 [`guides/composition.md`](guides/composition.md) before rendering to
@@ -121,12 +142,12 @@ settle shared technical delivery settings and transitions.
 ## Required Blender render-mode confirmation
 
 Before starting any Blender render, determine whether the user wants a local
-EEVEE test/preview or a Runpod Serverless Cycles production render. If the
+EEVEE test/preview or a Runpod Pod Cycles production render. If the
 request does not explicitly identify the mode, pause and ask one concise
 question before running a render command:
 
 > 이번 Blender 렌더는 (1) 로컬 EEVEE 테스트/프리뷰로 실행할까요, 아니면
-> (2) Runpod Serverless Cycles 제작 렌더로 실행할까요?
+> (2) Runpod Pod Cycles 제작 렌더로 실행할까요?
 
 Do not infer the mode from the presence of a Blender scene, a `--workers`
 option, or a previous command. Do not start an expensive render while waiting
@@ -142,21 +163,21 @@ the paths separate:
   and reports to `/private/tmp` (or another explicitly local scratch path),
   never to an iCloud-synchronized project directory. This path is for
   validation and framing, not final production quality.
-- **Runpod Serverless Cycles production:** use
+- **Runpod Pod Cycles production:** use
   `visual-runpod-prepare` → `visual-runpod submit` and the configured R2
   storage flow. Do not substitute local `parallel_blender_render.py`; one
-  request maps to one remote GPU/Blender process, and chunk parallelism belongs
-  to the endpoint queue. Tell the user that the job incurs Runpod usage cost
-  and show the live progress command before or alongside submission.
+  Pod maps to one remote GPU/Blender process and owns the complete requested
+  frame range. Tell the user that the job incurs Runpod usage cost and show the
+  live progress command before or alongside submission.
 
 If the user asks for both, run the local EEVEE validation first, report its
 result, and request or confirm the transition to the Runpod production render
 before submitting the paid job.
 
-## Blender renders via Runpod Serverless; EEVEE for local preview
+## Blender renders via Runpod Pod; EEVEE for local preview
 
 All Blender production rendering and Cycles image-sequence workloads are executed
-remotely via **Runpod Serverless** (`visual-runpod-prepare` →
+remotely via a **Runpod Pod** (`visual-runpod-prepare` →
 `visual-runpod submit`). Local Blender is used for scene authoring and rapid
 composition/framing validation with lightweight EEVEE previews. Asset
 portability validation runs in the worker by default.
@@ -176,11 +197,11 @@ scratch directory, especially when the project is inside iCloud Drive. Read
 [`guides/blender.md`](guides/blender.md) for scene preparation, portable
 assets, and local preview commands.
 
-## Runpod Serverless for all Blender production rendering
+## Runpod Pod for all Blender production rendering
 
 Manim, ordinary PyGfx, Taichi simulations, EEVEE previews, and final FFmpeg
 composition stay local by default. **Blender Cycles production rendering is
-routed to Runpod Serverless.**
+routed to a Runpod Pod.**
 
 Prepare a portable Blender bundle locally:
 
@@ -188,67 +209,83 @@ Prepare a portable Blender bundle locally:
 visual-runpod-prepare \
   --scene scene.blend --scene-script scenes/hero.py --asset-dir assets \
   --output render-job --width 1920 --height 1080 --fps 30 \
-  --frame-start 1 --frame-end 240 --chunk-size 60 --samples 128 --device auto
+  --frame-start 1 --frame-end 240 --samples 128 --device auto
 ```
 
 `visual-runpod-prepare` creates a self-contained input bundle with portable
-asset metadata, an empty output directory, and a `runpod-serverless`
+asset metadata, an empty output directory, and a `runpod-pod`
 `render_manifest.json`. Local Blender validation is optional; the worker checks
-the first chunk before rendering. Never upload credentials, `.env` files, ADC
+the bundle before rendering. Never upload credentials, `.env` files, ADC
 paths, SSH keys, browser profiles, or unrelated repository data.
 
 The worker image is built from `runpod/Dockerfile`, contains a pinned Blender
-runtime, and is deployed to a Runpod Serverless endpoint. One request maps to
-one GPU and one Blender process; horizontal parallelism comes from the endpoint
-queue rather than multiple Blender processes inside one worker:
+runtime, and runs in a disposable Runpod Pod. One Pod maps to one GPU and one
+Blender process; do not run multiple Blender processes inside that Pod:
 
 ```text
-job lifecycle:     prepare -> archive/upload -> submit chunks -> poll -> download -> verify
-worker lifecycle:  cold start -> render one chunk -> upload -> idle/terminate
+job lifecycle:     prepare -> archive/upload -> create Pod -> read R2 status -> download -> verify
+Pod lifecycle:     create -> boot -> render full range -> upload -> delete
 ```
 
-Put `RUNPOD_API_KEY` and `RUNPOD_ENDPOINT_ID`, plus the bucket-scoped
+The production worker uses a digest-pinned CUDA base image and is tested with
+Ubuntu 22.04/Python 3.10. Keep worker code compatible with that interpreter
+(for example, use `datetime.timezone.utc` rather than Python 3.11's
+`datetime.UTC`). The client creates this one-shot Pod with SSH disabled and no
+port 22 because the worker communicates through environment variables and R2
+presigned URLs.
+
+Export `RUNPOD_API_KEY` in the shell that launches `visual-runpod`, and set
+`RUNPOD_POD_IMAGE` and `RUNPOD_POD_GPU_ID`, plus the bucket-scoped
 `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`, in
-the protected central `.env` (mode `600`). `visual-runpod` loads that file and
-can also use the standard `~/.runpod/config.toml` API-key fallback; generic
-visualization wrappers do not inherit these credentials. Then submit the chunk
-batch with automatic R2 presigning:
+the protected central `.env` (mode `600`). `visual-runpod` never reads or writes
+the Runpod key from a config file; generic visualization wrappers do not inherit
+these credentials. Set a finite
+`RUNPOD_POD_TERMINATE_AFTER` as the client's wait/cost budget (and use a
+create-time guard or external watchdog for unattended runs), then submit with
+automatic R2 presigning:
 
 ```sh
 visual-runpod submit --bundle render-job --r2
-# Follow live chunk/frame progress through Runpod /stream:
+# Follow R2-backed Pod/frame progress and delete a terminal Pod automatically:
 visual-runpod progress --jobs-file render-job.runpod.json --download
-# Retry only failed R2 chunks with fresh signed URLs:
+# Retry a failed render in a new Pod:
 visual-runpod retry --jobs-file render-job.runpod.json
+# Stop a non-terminal Pod explicitly:
+visual-runpod terminate --jobs-file render-job.runpod.json --confirm
 # After verifying and retaining the local output, delete this batch from R2:
 visual-runpod cleanup --jobs-file render-job.runpod.json --confirm
 ```
 
 The client and worker use SHA-256-checked tar archives rather than embedding PNG
-data in Runpod JSON. The worker returns metadata and a signed output download
-URL; the client verifies every chunk and the merged sequence locally. For
+data in Runpod JSON. The worker writes metadata and a signed output download
+URL to R2; the client verifies the full sequence locally. For
 Blender, maintain the standard flow:
 `remote Cycles PNG sequence -> local verification -> local FFmpeg composition`.
 
-`progress` drains bounded worker events from Runpod `/stream` and prints phase,
-chunk, completed-frame count, and percentage without printing signed URLs. Frame
-progress is based on non-empty PNGs and remains reliable across Blender builds;
-sample fields are included when Blender emits sample statistics. Use
-`wait --stream` when a script should retain the normal wait command while
-showing the same live progress.
+The installed `runpodctl` version is probed at runtime because current v2.12
+help output does not include `--terminate-after`. Terminal and bounded-timeout
+cleanup are idempotent if a Pod disappears out of band. R2 status writes can
+arrive out of order during archive upload; the client therefore keeps aggregate
+frame progress monotonic for RenderPulse.
 
-Before a first production batch on a new endpoint or heterogeneous GPU pool,
+`progress` reads bounded worker status from R2 and prints phase,
+completed-frame count, and percentage without printing signed URLs. Frame
+progress is based on non-empty PNGs and remains reliable across Blender builds;
+sample fields are included when Blender emits sample statistics. `wait` provides
+the same terminal-state handling without progress lines.
+
+Before a first production range on a new GPU type,
 submit a one-frame Cycles compatibility probe and inspect its worker report.
 GPU enumeration alone is not proof that a backend can compile its render kernel.
 Record the selected backend and GPU model. The worker retries a recognized
 OptiX/PTX initialization failure once with CUDA for `auto` or `gpu`; an explicit
-OptiX request fails as requested. Inspect that fallback report before scaling a
-batch, or route it to a compatible, pinned GPU pool. A Runpod job is successful
+OptiX request fails as requested. Inspect that fallback report before submitting
+a long range. A Runpod job is successful
 only when `COMPLETED` includes a worker result with an output archive digest;
 `COMPLETED` without that result remains pending or failed, never render success.
 
 Read [`guides/runpod.md`](guides/runpod.md) for the manifest, signed URL
-boundary, worker image, chunk orchestration, and verification details.
+boundary, worker image, Pod lifecycle, and verification details.
 
 ## Keep narration separate from visual source
 

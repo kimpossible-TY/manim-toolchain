@@ -26,29 +26,12 @@ struct RenderPulseApp: App {
 }
 
 private struct MenuBarLabel: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     let primaryWork: WorkRuntime?
     let additionalActiveWorkCount: Int
 
-    private var spins: Bool {
-        primaryWork?.state == .running && !reduceMotion
-    }
-
     var body: some View {
-        if spins {
-            TimelineView(.animation(minimumInterval: 1.0 / 10.0)) { context in
-                labelContent(rotationAngle: spinAngle(for: context.date))
-            }
-        } else {
-            labelContent(rotationAngle: 0)
-        }
-    }
-
-    private func labelContent(rotationAngle: Double) -> some View {
         HStack(spacing: 4) {
             Image(systemName: symbolName)
-                .rotationEffect(.degrees(rotationAngle))
                 .foregroundStyle(tint)
 
             if let primaryWork {
@@ -95,10 +78,6 @@ private struct MenuBarLabel: View {
     private var accessibilityDescription: String {
         guard let primaryWork else { return "RenderPulse. No registered work." }
         return "\(primaryWork.configuration.name), \(primaryWork.state?.label ?? "Unavailable"), \(primaryWork.percent.formatted(.number.precision(.fractionLength(0)))) percent"
-    }
-
-    private func spinAngle(for date: Date) -> Double {
-        date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.2) / 1.2 * 360
     }
 
     private func compactName(_ name: String) -> String {

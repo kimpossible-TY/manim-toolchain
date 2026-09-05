@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a portable Blender/Cycles bundle for Runpod Serverless chunks."""
+"""Create a portable Blender/Cycles bundle for one disposable Runpod Pod."""
 
 from __future__ import annotations
 
@@ -34,7 +34,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fps", type=int, required=True)
     parser.add_argument("--frame-start", type=int, required=True)
     parser.add_argument("--frame-end", type=int, required=True)
-    parser.add_argument("--chunk-size", type=int, default=60)
     parser.add_argument("--samples", type=int, default=128)
     parser.add_argument("--denoise", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
@@ -54,7 +53,7 @@ def parse_args() -> argparse.Namespace:
         help="Run local Blender portability validation before creating the bundle",
     )
     args = parser.parse_args()
-    for name in ("width", "height", "fps", "chunk_size", "samples"):
+    for name in ("width", "height", "fps", "samples"):
         if getattr(args, name) <= 0:
             parser.error(f"--{name.replace('_', '-')} must be positive")
     if args.frame_start > args.frame_end:
@@ -134,7 +133,7 @@ def prepare(args: argparse.Namespace) -> Path:
 
     manifest: dict[str, object] = {
         "format_version": 2,
-        "backend": "runpod-serverless",
+        "backend": "runpod-pod",
         "scene": "scene.blend",
         "scene_script": "scene.py" if scene_script else None,
         "assets": [],
@@ -151,7 +150,6 @@ def prepare(args: argparse.Namespace) -> Path:
             "output_prefix": "output/frame_",
             "samples": args.samples,
             "denoise": args.denoise,
-            "chunk_size": args.chunk_size,
         },
         "source_validation": {"checked": False, "portable": None},
         "remote_authorization_required": True,
@@ -188,11 +186,11 @@ def main() -> int:
     try:
         output = prepare(args)
     except (OSError, RuntimeError, ValueError) as exc:
-        print(f"runpod bundle error: {exc}", file=sys.stderr)
+        print(f"runpod Pod bundle error: {exc}", file=sys.stderr)
         return 2
     print(f"RUNPOD_BUNDLE={output}")
     print(f"RUNPOD_MANIFEST={output / 'render_manifest.json'}")
-    print("Next: upload the bundle as a tar.gz to object storage, then run visual-runpod submit.")
+    print("Next: run visual-runpod submit --bundle ... --r2 to create a disposable GPU Pod.")
     return 0
 
 
